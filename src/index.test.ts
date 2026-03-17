@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { greet } from "./index.js";
+import { greet } from "./greet.js";
 
 describe("greet", () => {
   it("returns a greeting with the given name", () => {
