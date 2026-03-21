@@ -1,26 +1,25 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+/**
+ * Supabase client initialization.
+ * Uses SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY from environment.
+ */
 
-let instance: SupabaseClient | null = null;
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+
+let client: SupabaseClient | null = null;
 
 export function getSupabaseClient(): SupabaseClient {
-  if (instance) return instance;
+  if (client) return client;
 
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !key) {
     throw new Error(
-      "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables"
+      'Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables. ' +
+      'Copy .env.example to .env and fill in your Supabase credentials.'
     );
   }
 
-  instance = createClient(url, key, {
-    auth: { persistSession: false },
-  });
-
-  return instance;
-}
-
-export function resetClient(): void {
-  instance = null;
+  client = createClient(url, key);
+  return client;
 }
