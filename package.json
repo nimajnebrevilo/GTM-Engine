@@ -14,7 +14,8 @@
     "data:download": "tsx src/sources/download-lists.ts",
     "db:query": "tsx src/db/query.ts",
     "enrich": "tsx src/enrichment/run.ts",
-    "strategy": "tsx src/sources/run-strategy.ts"
+    "strategy": "tsx src/sources/run-strategy.ts",
+    "cli": "tsx src/cli.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
@@ -35,6 +36,7 @@
     "pg": "^8.20.0",
     "pino": "^9.14.0",
     "tsx": "^4.21.0",
+    "undici": "^7.24.5",
     "zod": "^3.25.76"
   }
 }
