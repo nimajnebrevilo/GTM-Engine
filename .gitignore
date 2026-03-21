@@ -3,3 +3,5 @@ dist/
 .env
 .env.local
 src/gtm_agent.egg-info/
+__pycache__/
+*.egg-info/
