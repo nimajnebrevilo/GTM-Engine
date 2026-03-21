@@ -86,7 +86,7 @@ export async function getContactsByCompany(companyId: string): Promise<ContactRo
     .from('contacts')
     .select()
     .eq('company_id', companyId)
-    .neq('status', 'do_not_contact')
+    .neq('status', 'opted_out')
     .order('seniority', { ascending: true });
 
   if (error) throw new Error(`Failed to get contacts: ${error.message}`);

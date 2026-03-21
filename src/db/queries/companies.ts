@@ -51,6 +51,7 @@ export interface CompanyRow {
   is_primary: boolean;
   created_at: string;
   updated_at: string;
+  client_id: string | null;
 }
 
 /**

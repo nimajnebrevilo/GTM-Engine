@@ -24,11 +24,6 @@ function parseArgs(): { batchSize: number; concurrency: number } {
 async function enrichCompany(companyId: string, website: string | null): Promise<void> {
   const db = getSupabaseClient();
 
-  await db
-    .from('companies')
-    .update({ enrichment_status: 'in_progress' })
-    .eq('id', companyId);
-
   try {
     const enrichmentSources: string[] = [];
     const fieldsUpdated: string[] = [];
