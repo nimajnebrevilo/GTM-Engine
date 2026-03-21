@@ -2,3 +2,4 @@ node_modules/
 dist/
 .env
 .env.local
+src/gtm_agent.egg-info/

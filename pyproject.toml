@@ -1,0 +1,20 @@
+[project]
+name = "gtm-agent"
+version = "0.1.0"
+description = "Claude-powered orchestration layer for the GTM Engine"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=0.52.0",
+    "supabase>=2.13.0",
+    "python-dotenv>=1.1.0",
+    "rich>=14.0.0",
+]
+
+[project.optional-dependencies]
+mcp = [
+    "mcp[cli]>=1.9.0",
+]
+
+[project.scripts]
+gtm-agent = "gtm_agent.agent:main"
+gtm-mcp = "gtm_agent.mcp_server:main"

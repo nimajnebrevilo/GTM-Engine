@@ -14,7 +14,8 @@
     "data:download": "tsx src/sources/download-lists.ts",
     "db:query": "tsx src/db/query.ts",
     "enrich": "tsx src/enrichment/run.ts",
-    "strategy": "tsx src/sources/run-strategy.ts"
+    "strategy": "tsx src/sources/run-strategy.ts",
+    "cli": "tsx src/cli.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
