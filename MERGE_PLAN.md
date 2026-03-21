@@ -10,6 +10,46 @@ The modernised branch (`the-sandpit/claude/tam-company-enrichment-KKKQe`) **supe
 
 ---
 
+## Core Data Philosophy: Supabase-First
+
+**Supabase is the growing data asset.** Every interaction enriches it.
+
+The pipeline follows a strict **local-first** pattern:
+
+1. **Always check Supabase first** — before any external API call, query the local database
+2. **Only research what's missing** — external providers fill gaps, not replace local data
+3. **Write back everything** — any new data from external sources is upserted into Supabase
+4. **Data compounds over time** — each campaign enriches the shared company/contact pool for future campaigns
+
+```
+  Request for data
+        │
+        ▼
+  ┌─────────────┐    HIT     ┌──────────────┐
+  │  Supabase   │ ─────────→ │  Return data  │
+  │  (check DB) │            └──────────────┘
+  └──────┬──────┘
+         │ MISS or INCOMPLETE
+         ▼
+  ┌─────────────┐            ┌──────────────┐
+  │  External   │ ─────────→ │  Upsert into │
+  │  Providers  │   results  │  Supabase    │
+  └─────────────┘            └──────┬───────┘
+                                    │
+                                    ▼
+                             ┌──────────────┐
+                             │  Return data  │
+                             └──────────────┘
+```
+
+This means:
+- **Campaign 1** pays to enrich a company. **Campaign 2** gets it free from cache.
+- Bulk CSV imports, web scrapes, and free sources grow the pool at zero API cost.
+- The `enrichment_cache` table with TTL prevents stale data while avoiding duplicate spend.
+- Provider credits are only consumed when Supabase genuinely doesn't have what we need.
+
+---
+
 ## Branch Comparison
 
 | Dimension | Main (current) | Modernised (tam-enrichment) |
@@ -30,42 +70,49 @@ The modernised branch (`the-sandpit/claude/tam-company-enrichment-KKKQe`) **supe
 
 ---
 
-## Architecture: Modernised Codebase
+## Architecture: Revised Pipeline
+
+The pipeline follows a **funnel** — broad to narrow — spending money only on accounts that have already passed filters.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                      GTM ENGINE PIPELINE                            │
 │                                                                     │
-│  1. ICP CHALLENGE          Conversational analysis. Score ICP       │
-│     src/icp/               alignment via website + client base.     │
+│  1. TAM BUILD              Build broad universe of companies.       │
+│     src/tam/               Supabase-first: query local DB, then    │
+│     src/sources/           discover via Exa + Apollo + 80 free     │
+│     src/providers/         sources. Dedup & merge. All results     │
+│                            written back to Supabase.               │
 │          │                                                          │
-│  2. COMPANY DISCOVERY      Exa semantic + Apollo structured         │
-│     src/providers/         + 80 free sources + bulk CSV import      │
-│     src/sources/           + WebSearch gap-fill strategies          │
+│  2. SIGNALS & TRIGGERS     Layer buying intent on TAM.              │
+│     src/providers/exa/     Funding, hiring, exec changes, product  │
+│     src/db/queries/        launches, expansion. Score strength.     │
+│     signals.ts             Narrows TAM to actionable accounts.     │
 │          │                                                          │
-│  3. DEDUP & MERGE          3-pass: reg#, domain, fuzzy name         │
-│     src/dedup/             Completeness scoring. Primary pick.      │
+│  3. ICP SCORING            Score accounts against client's ICP.     │
+│     src/icp/               ICPs stored in DB as first-class        │
+│     src/tam/builder.ts     entities. Multi-factor scoring: geo,    │
+│                            industry, size, keywords, signals.      │
+│                            Tier 1/2/3 segmentation.                │
 │          │                                                          │
-│  4. ROLE DEFINITION        Apollo people search per company         │
-│     src/providers/apollo/  Store in search_role_filters.            │
+│  4. PEOPLE SEARCH          Find contacts at high-scoring accounts.  │
+│     src/providers/apollo/  Supabase-first: check existing contacts │
+│     src/db/queries/        before Apollo people search. Role       │
+│     contacts.ts            filters (titles, seniorities, depts).   │
 │          │                                                          │
-│  5. ENRICHMENT WATERFALL   Cache-first. Inline MV validation.       │
-│     src/services/          Apollo → MV → Prospeo → MV → Freckle    │
-│     src/enrichment/        → bulk MV sweep before export.           │
+│  5. ENRICH & VALIDATE      Spend credits only on qualified leads.   │
+│     src/services/          Cache → Apollo → MV → Prospeo → MV →   │
+│     enrichment.ts          Freckle → bulk MV sweep. All results    │
+│     src/enrichment/        written back to Supabase for reuse.     │
 │          │                                                          │
-│  6. TAM BUILD              Score ICP fit (geo, industry, size,      │
-│     src/tam/               keywords). Tier 1/2/3. Segment.         │
-│          │                                                          │
-│  7. EXPORT                 34-field CSV/JSON. Campaign metadata.    │
-│     src/tam/export.ts      Filter by tier, phone, trigger.         │
-│                                                                     │
-│  ── PARALLEL ─── Signal/Trigger Detection (Exa) ─── src/providers/ │
-│                  Funding, hiring, exec changes, product launches    │
+│  6. EXPORT                 34-field CSV/JSON. Campaign metadata.    │
+│     src/tam/export.ts      Filter by tier, signal, phone, email.   │
+│                            Suppression & overlap checks.           │
 └─────────────────────────────────────────────────────────────────────┘
                               │
                     ┌─────────┴─────────┐
                     │  Supabase (PG)    │
-                    │  11 tables        │
+                    │  12+ tables       │
                     │  6 enums          │
                     │  9 triggers       │
                     │  15+ indexes      │
@@ -73,6 +120,14 @@ The modernised branch (`the-sandpit/claude/tam-company-enrichment-KKKQe`) **supe
                     │  + contacts       │
                     └───────────────────┘
 ```
+
+### Why This Order Matters
+
+| Old Order (code as-is) | New Order (revised) | Savings |
+|---|---|---|
+| ICP Challenge first → discover companies → enrich all → then score TAM | TAM first → signals filter → ICP score → only then find people → enrich qualified | Credits spent only on accounts that passed 2 filters |
+| Enrichment happens before scoring | Enrichment happens after scoring | ~60-80% fewer enrichment credits |
+| TAM built from enriched data | TAM built from discovery data, enrichment is final step | Faster time-to-TAM |
 
 ### Module Map
 
@@ -90,6 +145,7 @@ src/
       contacts.ts             # CRUD, search by seniority/department, batch
       campaigns.ts            # Client/campaign CRUD, suppressions, overlaps
       signals.ts              # Signal CRUD, strength queries
+      icp-definitions.ts      # ICP CRUD, versioning, lead scoring queries (NEW)
       tam.ts                  # TAM queries
       searches.ts             # Search tracking (NEW — enrichment workflow)
       enrichment-cache.ts     # Cache read/write with TTL (NEW — cost control)
@@ -181,14 +237,76 @@ src/
 | 10 | `data_imports` | *new* | Bulk load tracking with error counts |
 | 11 | `exports` | *new* | Export audit trail |
 
-**Plus 4 new tables** needed for the enrichment workflow (from ARCHITECTURE.md):
+**Plus 5 new tables** needed for the enrichment workflow and ICP scoring:
 
 | # | Table | Purpose |
 |---|---|---|
-| 12 | `searches` | Tracks each prospecting query |
-| 13 | `search_companies` | Junction: search ↔ company with relevance scoring |
-| 14 | `search_role_filters` | Role definitions per search |
-| 15 | `enrichment_cache` | Raw provider responses with TTL (cost control engine) |
+| 12 | `icp_definitions` | **First-class ICP entity** — stored per client, versioned, used for lead scoring |
+| 13 | `searches` | Tracks each prospecting query |
+| 14 | `search_companies` | Junction: search ↔ company with relevance scoring |
+| 15 | `search_role_filters` | Role definitions per search |
+| 16 | `enrichment_cache` | Raw provider responses with TTL (cost control engine) |
+
+### ICP Definitions Table (NEW — first-class entity)
+
+```sql
+CREATE TABLE IF NOT EXISTS icp_definitions (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id     UUID NOT NULL REFERENCES clients(id),
+  name          TEXT NOT NULL,                    -- e.g. "Series A SaaS — Q1 2026"
+  version       INT NOT NULL DEFAULT 1,           -- increment on refinement
+  parent_id     UUID REFERENCES icp_definitions(id), -- previous version
+  status        TEXT NOT NULL DEFAULT 'draft',    -- draft | active | archived
+
+  -- Firmographic filters
+  company_size_min    INT,
+  company_size_max    INT,
+  revenue_min_usd     BIGINT,
+  revenue_max_usd     BIGINT,
+  geographies         TEXT[] NOT NULL DEFAULT '{}',
+  industries          TEXT[] NOT NULL DEFAULT '{}',
+  company_types       TEXT[] DEFAULT '{}',
+
+  -- Keyword matching
+  keywords            TEXT[] NOT NULL DEFAULT '{}',
+  exclusion_keywords  TEXT[] DEFAULT '{}',
+  technology_signals  TEXT[] DEFAULT '{}',
+
+  -- Scoring weights (overridable per ICP)
+  weight_geography    NUMERIC(3,1) DEFAULT 3.0,
+  weight_industry     NUMERIC(3,1) DEFAULT 3.0,
+  weight_size         NUMERIC(3,1) DEFAULT 2.0,
+  weight_keywords     NUMERIC(3,1) DEFAULT 2.0,
+  weight_signals      NUMERIC(3,1) DEFAULT 2.0,
+  weight_website      NUMERIC(3,1) DEFAULT 1.0,
+  exclusion_penalty   NUMERIC(3,1) DEFAULT -2.0,
+
+  -- Challenge/refinement metadata
+  website_analysis    JSONB,          -- cached analysis of client's own site
+  client_base_analysis JSONB,         -- patterns observed from client's customers
+  refinements         JSONB,          -- array of ICPRefinement objects
+  challenge_summary   TEXT,
+
+  -- Role targeting (who to find at matching companies)
+  target_titles       TEXT[] DEFAULT '{}',   -- e.g. ['VP Sales', 'CRO']
+  target_seniorities  TEXT[] DEFAULT '{}',   -- e.g. ['vp', 'c_suite', 'director']
+  target_departments  TEXT[] DEFAULT '{}',   -- e.g. ['sales', 'marketing']
+
+  created_at    TIMESTAMPTZ DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Each campaign links to an ICP definition for scoring
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS icp_definition_id UUID REFERENCES icp_definitions(id);
+```
+
+**Why ICP in the database matters:**
+- **Reuse**: Same ICP across multiple campaigns for one client
+- **Versioning**: Refine ICP over time, compare results between versions
+- **Lead scoring in SQL**: `WHERE employee_count BETWEEN icp.size_min AND icp.size_max`
+- **Stored weights**: Different clients can have different scoring priorities
+- **Role targeting built in**: Titles/seniorities/departments live with the ICP, not as separate config
+- **Audit trail**: `parent_id` chains show how the ICP evolved through challenge iterations
 
 ### Triggers (modernised)
 
@@ -199,12 +317,79 @@ src/
 
 ---
 
-## Enrichment Waterfall (Economic Engine)
+## Revised Pipeline Detail
+
+### Stage 1: TAM Build (Broad Universe)
 
 ```
-For each contact:
+Supabase-first: Query local companies table for matches
+        │
+        ├─ HIT → Use existing data (zero cost)
+        │
+        └─ GAPS → Discover via external sources:
+                  ├─ Exa semantic search (NL query)
+                  ├─ Apollo structured search (industry, size, geo)
+                  ├─ 80+ free sources (Wikidata, gov registries, CSV imports)
+                  └─ All results → dedup → upsert back to Supabase
+```
 
-1. CACHE CHECK (enrichment_cache + contacts table)
+Every company discovered is written to Supabase. Future campaigns benefit automatically.
+
+### Stage 2: Signals & Triggers (Narrow the TAM)
+
+```
+For each company in TAM:
+  1. Check signals table for existing fresh signals
+  2. If no fresh signals → Exa trigger detection:
+     - funding_round, new_hire, leadership_change
+     - expansion, product_launch, acquisition, news_mention
+  3. Score signal strength (0-1), set expiry
+  4. Write signals back to Supabase
+  5. Filter TAM to accounts with active signals → "Signal TAM"
+```
+
+Signals reduce a TAM of thousands to hundreds of timely accounts.
+
+### Stage 3: ICP Scoring (Rank Accounts)
+
+```
+Load client's ICP definition from icp_definitions table
+        │
+For each company in Signal TAM:
+  ├─ Geography match    (weight from ICP, default 3.0)
+  ├─ Industry match     (weight from ICP, default 3.0)
+  ├─ Size match         (weight from ICP, default 2.0)
+  ├─ Keyword match      (weight from ICP, default 2.0)
+  ├─ Signal strength    (weight from ICP, default 2.0)  ← NEW: signals feed scoring
+  ├─ Website bonus      (weight from ICP, default 1.0)
+  └─ Exclusion penalty  (from ICP, default -2.0)
+        │
+Segment: Tier 1 (≥0.8) │ Tier 2 (0.5-0.79) │ Tier 3 (<0.5)
+        │
+Upsert campaign_companies with icp_fit_score + segment
+```
+
+**ICP stored in DB** means scoring weights are per-client, versionable, and queryable.
+
+### Stage 4: People Search (Qualified Accounts Only)
+
+```
+For Tier 1 + Tier 2 accounts:
+  1. Check Supabase contacts table first
+     └─ If existing contacts match role filter → use them (zero cost)
+  2. For gaps → Apollo people search by company + role filter
+     - Titles, seniorities, departments from ICP definition
+  3. All new contacts → upsert to Supabase contacts table
+```
+
+Credits spent only on companies that scored well. Tier 3 accounts are not enriched.
+
+### Stage 5: Enrich & Validate (Qualified Contacts Only)
+
+```
+For each contact at Tier 1/2 companies:
+
+1. SUPABASE CACHE CHECK (enrichment_cache + contacts table)
    └─ If fresh hit with needed fields → DONE (zero cost)
 
 2. APOLLO ENRICHMENT
@@ -220,13 +405,29 @@ For each contact:
 
 5. MILLION VERIFIER BULK SWEEP (pre-export)
    └─ Re-validate ALL emails before delivery
+
+All enrichment results → write back to Supabase (enrichment_cache + contacts)
 ```
 
-**Cost controls:**
-- `enrichment_cache` with TTL — never pay twice for the same lookup
-- `cost_tracker` — running credit tally per provider with monthly caps
-- Waterfall stops at the earliest step that fills needed fields
-- MV inline validation prevents paying downstream on dead emails
+### Stage 6: Export
+
+34-field CSV/JSON with campaign metadata, ICP scores, signal data, contact info.
+Filter by tier, signal type, has_phone, has_email. Suppression & overlap checks.
+
+---
+
+### Cost Impact of Revised Pipeline
+
+| Stage | Cost | What it does |
+|---|---|---|
+| 1. TAM Build | Low (free sources + cached) | Broad discovery, Supabase-first |
+| 2. Signals | Low (Exa search credits) | Filters thousands → hundreds |
+| 3. ICP Scoring | Zero (local computation) | Filters hundreds → top tiers |
+| 4. People Search | Medium (Apollo credits) | Only for Tier 1+2 companies |
+| 5. Enrichment | Medium (waterfall credits) | Only for qualified contacts |
+| 6. Export | Zero | Local generation |
+
+**Net effect:** Enrichment credits spent on ~20-30% of original TAM instead of 100%.
 
 ---
 
