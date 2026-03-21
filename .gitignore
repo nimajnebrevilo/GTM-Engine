@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 .env.local
+.claude/hooks/create-env.sh
 src/gtm_agent.egg-info/
 __pycache__/
 *.egg-info/
