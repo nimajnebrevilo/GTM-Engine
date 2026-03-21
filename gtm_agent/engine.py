@@ -184,6 +184,24 @@ def update_icp(icp_id: str, **updates: Any) -> dict:
     return _run("icp:update", {"id": icp_id, **updates})
 
 
+def challenge_icp(
+    icp_id: str,
+    website_url: str,
+    *,
+    skip_client_base: bool = False,
+    homepage_only: bool = False,
+) -> dict:
+    args: dict[str, Any] = {
+        "icpId": icp_id,
+        "websiteUrl": website_url,
+    }
+    if skip_client_base:
+        args["skipClientBase"] = True
+    if homepage_only:
+        args["homepageOnly"] = True
+    return _run("icp:challenge", args, timeout=180)
+
+
 # ── Search (Company Discovery) ────────────────────────────────────────────
 
 

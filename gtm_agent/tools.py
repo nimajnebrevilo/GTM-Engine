@@ -183,6 +183,26 @@ TOOLS = [
             "required": ["icp_id"],
         },
     },
+    {
+        "name": "challenge_icp",
+        "description": "Challenge an ICP definition against the client's website and existing client base. Deep-scrapes the website (homepage, pricing, about, customers pages) to extract value proposition, target personas, pricing signals, customer logos, case studies, and tech stack. Compares these signals against the stated ICP and generates refinements with confidence scores. Use this BEFORE activating an ICP to validate assumptions.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "icp_id": {"type": "string", "description": "ID of the draft ICP to challenge"},
+                "website_url": {"type": "string", "description": "Client website URL to analyse (e.g. 'https://acme.com')"},
+                "skip_client_base": {
+                    "type": "boolean",
+                    "description": "Skip client-base analysis (faster, website-only challenge). Default false.",
+                },
+                "homepage_only": {
+                    "type": "boolean",
+                    "description": "Only analyse homepage (faster but less thorough). Default false.",
+                },
+            },
+            "required": ["icp_id", "website_url"],
+        },
+    },
     # ── Company Discovery (Stage 1: TAM Build) ────────────────────────────
     {
         "name": "search_companies",

@@ -54,6 +54,7 @@ def execute_tool(name: str, args: dict[str, Any]) -> str:
         "activate_icp": lambda: engine.activate_icp(args["icp_id"]),
         "refine_icp": lambda: engine.refine_icp(**args),
         "update_icp": lambda: engine.update_icp(args.pop("icp_id"), **args),
+        "challenge_icp": lambda: engine.challenge_icp(**args),
         "search_companies": lambda: engine.search_companies(**args),
         "detect_signals": lambda: engine.detect_signals(**args),
         "build_tam": lambda: engine.build_tam(args),

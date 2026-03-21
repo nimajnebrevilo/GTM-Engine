@@ -20,6 +20,7 @@
  *   icp:activate           Activate an ICP
  *   icp:refine             Refine an ICP (create new version)
  *   icp:update             Update an ICP definition
+ *   icp:challenge          Challenge an ICP against website + client base
  *   search                 Run company discovery (Exa + Apollo)
  *   signals                Detect trigger events for a company
  *   tam:build              Build TAM summary from ICP
@@ -60,7 +61,7 @@ async function main() {
       commands: [
         'client:create', 'client:list', 'client:get',
         'campaign:create', 'campaign:list', 'campaign:get', 'campaign:status',
-        'icp:create', 'icp:get-active', 'icp:list', 'icp:activate', 'icp:refine', 'icp:update',
+        'icp:create', 'icp:get-active', 'icp:list', 'icp:activate', 'icp:refine', 'icp:update', 'icp:challenge',
         'search', 'signals', 'tam:build', 'people:search',
         'enrich', 'enrich:bulk-verify', 'export',
         'cost:summary', 'db:query', 'status',
@@ -145,6 +146,11 @@ async function main() {
         const { updateICPDefinition } = await import('./db/queries/icp-definitions.js');
         const { id, ...updates } = jsonArgs;
         output(await updateICPDefinition(id, updates));
+        break;
+      }
+      case 'icp:challenge': {
+        const { challengeICP } = await import('./icp/challenge-orchestrator.js');
+        output(await challengeICP(jsonArgs));
         break;
       }
 
