@@ -17,7 +17,7 @@ async function validateSaas(filePath: string) {
   let noName = 0;
   let noDomain = 0;
   let noIndustry = 0;
-  let sample: Record<string, string>[] = [];
+  const sample: Record<string, string>[] = [];
 
   const parser = createReadStream(filePath).pipe(
     parse({ columns: true, skip_empty_lines: true, relax_column_count: true, relax_quotes: true, trim: true }),
@@ -57,7 +57,7 @@ async function validateGmaps(filePath: string) {
   let noTitle = 0;
   let noLink = 0;
   let noCategory = 0;
-  let sample: Record<string, string>[] = [];
+  const sample: Record<string, string>[] = [];
 
   const parser = createReadStream(filePath).pipe(
     parse({ columns: true, skip_empty_lines: true, relax_column_count: true, relax_quotes: true, trim: true }),

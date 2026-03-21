@@ -8,7 +8,7 @@
  */
 
 import { getSupabaseClient } from '../db/client.js';
-import { normalizeName, normalizeDomain } from './normalizer.js';
+import { normalizeDomain } from './normalizer.js';
 
 export interface DedupResult {
   totalRecords: number;

@@ -20,7 +20,6 @@ function getConnectionString(): string {
   // Derive from Supabase URL if DATABASE_URL not set
   const supabaseUrl = process.env.SUPABASE_URL;
   if (supabaseUrl) {
-    const ref = new URL(supabaseUrl).hostname.split('.')[0];
     console.error(
       `Warning: DATABASE_URL not set. Set it in .env to your Supabase direct connection string.\n` +
       `  Get it from: Supabase Dashboard → Settings → Database → Connection string (URI)\n` +

@@ -12,7 +12,6 @@ import type {
   WebsiteAnalysis,
   ClientBaseAnalysis,
   ICPRefinement,
-  ICPChallengeResult,
 } from './types.js';
 
 /**
