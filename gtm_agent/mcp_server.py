@@ -21,9 +21,13 @@ import json
 import sys
 from typing import Any
 
+from pathlib import Path
+
 from dotenv import load_dotenv
 
-load_dotenv()
+# Always load .env from the project root, regardless of cwd
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(_PROJECT_ROOT / ".env")
 
 from gtm_agent import engine
 from gtm_agent.tools import TOOLS
