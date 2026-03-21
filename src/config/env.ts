@@ -4,6 +4,7 @@
  */
 
 import { z } from 'zod';
+import { setupProxy } from './proxy.js';
 
 const envSchema = z.object({
   // Supabase (required)
@@ -51,6 +52,10 @@ export function getEnv(): Env {
   }
 
   _env = result.data;
+
+  // Configure proxy if HTTPS_PROXY / HTTP_PROXY is set
+  setupProxy();
+
   return _env;
 }
 
