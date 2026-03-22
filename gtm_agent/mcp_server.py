@@ -50,8 +50,7 @@ if _to_add:
     os.environ["no_proxy"] = new_val
 
 from gtm_agent import engine
-from gtm_agent import degraded_mode
-from gtm_agent.tools import TOOLS, DEGRADED_TOOLS
+from gtm_agent.tools import TOOLS
 
 
 def _convert_tool_to_mcp(tool: dict) -> dict:
@@ -63,66 +62,34 @@ def _convert_tool_to_mcp(tool: dict) -> dict:
     }
 
 
-def _get_dispatch(args: dict[str, Any]) -> dict:
-    """Build dispatch table — routes through degraded_mode when active."""
-    if degraded_mode.is_degraded():
-        dm = degraded_mode
-        return {
-            "create_client": lambda: dm.create_client(**args),
-            "list_clients": lambda: dm.list_clients(),
-            "get_client": lambda: dm.get_client(args["client_id"]),
-            "create_campaign": lambda: dm.create_campaign(**args),
-            "list_campaigns": lambda: dm.list_campaigns(args.get("client_id")),
-            "create_icp": lambda: dm.create_icp(**args),
-            "get_active_icp": lambda: dm.get_active_icp(args["client_id"]),
-            "activate_icp": lambda: dm.activate_icp(args["icp_id"]),
-            "refine_icp": lambda: dm.refine_icp(**args),
-            "update_icp": lambda: dm.update_icp(args.pop("icp_id"), **args),
-            "challenge_icp": lambda: dm.challenge_icp(**args),
-            "search_companies": lambda: dm.search_companies(**args),
-            "save_companies": lambda: dm.save_companies(args.get("companies", [])),
-            "detect_signals": lambda: dm.detect_signals(**args),
-            "save_signals": lambda: dm.save_signals(args["domain"], args.get("signals", [])),
-            "build_tam": lambda: dm.build_tam(args),
-            "search_people": lambda: dm.search_people(**args),
-            "save_contacts": lambda: dm.save_contacts(args.get("contacts", [])),
-            "enrich_contact": lambda: dm.enrich_contact(**args),
-            "bulk_verify_emails": lambda: dm.bulk_verify_emails(args.get("emails", [])),
-            "export_campaign": lambda: dm.export_campaign(**args),
-            "get_cost_summary": lambda: dm.get_cost_summary(),
-            "get_engine_status": lambda: dm.get_engine_status(),
-            "preflight_check": lambda: engine.preflight_check(),
-        }
-    else:
-        return {
-            "create_client": lambda: engine.create_client(**args),
-            "list_clients": lambda: engine.list_clients(),
-            "get_client": lambda: engine.get_client(args["client_id"]),
-            "create_campaign": lambda: engine.create_campaign(**args),
-            "list_campaigns": lambda: engine.list_campaigns(args.get("client_id")),
-            "create_icp": lambda: engine.create_icp(**args),
-            "get_active_icp": lambda: engine.get_active_icp(args["client_id"]),
-            "activate_icp": lambda: engine.activate_icp(args["icp_id"]),
-            "refine_icp": lambda: engine.refine_icp(**args),
-            "update_icp": lambda: engine.update_icp(args.pop("icp_id"), **args),
-            "challenge_icp": lambda: engine.challenge_icp(**args),
-            "search_companies": lambda: engine.search_companies(**args),
-            "detect_signals": lambda: engine.detect_signals(**args),
-            "build_tam": lambda: engine.build_tam(args),
-            "search_people": lambda: engine.search_people(**args),
-            "enrich_contact": lambda: engine.enrich_contact(**args),
-            "bulk_verify_emails": lambda: engine.bulk_verify_emails(args["emails"]),
-            "export_campaign": lambda: engine.export_campaign(**args),
-            "get_cost_summary": lambda: engine.get_cost_summary(),
-            "get_engine_status": lambda: engine.get_engine_status(),
-            "preflight_check": lambda: engine.preflight_check(),
-        }
-
-
 def execute_tool(name: str, args: dict[str, Any]) -> str:
     """Execute a tool and return JSON result."""
+    # Strip gtm_ prefix if present
     clean_name = name.removeprefix("gtm_")
-    dispatch = _get_dispatch(args)
+
+    dispatch = {
+        "create_client": lambda: engine.create_client(**args),
+        "list_clients": lambda: engine.list_clients(),
+        "get_client": lambda: engine.get_client(args["client_id"]),
+        "create_campaign": lambda: engine.create_campaign(**args),
+        "list_campaigns": lambda: engine.list_campaigns(args.get("client_id")),
+        "create_icp": lambda: engine.create_icp(**args),
+        "get_active_icp": lambda: engine.get_active_icp(args["client_id"]),
+        "activate_icp": lambda: engine.activate_icp(args["icp_id"]),
+        "refine_icp": lambda: engine.refine_icp(**args),
+        "update_icp": lambda: engine.update_icp(args.pop("icp_id"), **args),
+        "challenge_icp": lambda: engine.challenge_icp(**args),
+        "search_companies": lambda: engine.search_companies(**args),
+        "detect_signals": lambda: engine.detect_signals(**args),
+        "build_tam": lambda: engine.build_tam(args),
+        "search_people": lambda: engine.search_people(**args),
+        "enrich_contact": lambda: engine.enrich_contact(**args),
+        "bulk_verify_emails": lambda: engine.bulk_verify_emails(args["emails"]),
+        "export_campaign": lambda: engine.export_campaign(**args),
+        "get_cost_summary": lambda: engine.get_cost_summary(),
+        "get_engine_status": lambda: engine.get_engine_status(),
+        "preflight_check": lambda: engine.preflight_check(),
+    }
 
     fn = dispatch.get(clean_name)
     if not fn:
@@ -159,12 +126,11 @@ def handle_jsonrpc(request: dict) -> dict:
         return None  # type: ignore
 
     elif method == "tools/list":
-        all_tools = TOOLS + (DEGRADED_TOOLS if degraded_mode.is_degraded() else [])
         return {
             "jsonrpc": "2.0",
             "id": req_id,
             "result": {
-                "tools": [_convert_tool_to_mcp(t) for t in all_tools],
+                "tools": [_convert_tool_to_mcp(t) for t in TOOLS],
             },
         }
 
