@@ -92,7 +92,7 @@ TOOLS = [
     # ── ICP Definition ─────────────────────────────────────────────────────
     {
         "name": "create_icp",
-        "description": "Create an Ideal Customer Profile (ICP) definition for a client. This defines WHO we're looking for — industries, geographies, company sizes, keywords, and target roles. For NEW campaigns, analyse the client's website and brief first, then challenge the assumptions before finalising.",
+        "description": "Create an Ideal Customer Profile (ICP) definition for a client. This defines WHO we're looking for — industries, geographies, company sizes, keywords, and target roles. BEFORE calling this tool: (1) research the client's website to understand their product, customers, and market, (2) cross-reference the user's brief against website evidence. AFTER calling this tool: present the full ICP to the user with your reasoning for each field and wait for approval before proceeding to challenge.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -136,7 +136,7 @@ TOOLS = [
     },
     {
         "name": "activate_icp",
-        "description": "Activate an ICP definition (and archive any previously active one for this client). Do this after the human has approved the ICP.",
+        "description": "Activate an ICP definition (and archive any previously active one for this client). NEVER call this without explicit human approval. The user must have seen and confirmed the final ICP definition (post-challenge, post-refinement) before you activate it.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -185,7 +185,7 @@ TOOLS = [
     },
     {
         "name": "challenge_icp",
-        "description": "Challenge an ICP definition against the client's website and existing client base. Deep-scrapes the website (homepage, pricing, about, customers pages) to extract value proposition, target personas, pricing signals, customer logos, case studies, and tech stack. Compares these signals against the stated ICP and generates refinements with confidence scores. Use this BEFORE activating an ICP to validate assumptions.",
+        "description": "Challenge an ICP definition against the client's website and existing client base. Deep-scrapes the website (homepage, pricing, about, customers pages) to extract value proposition, target personas, pricing signals, customer logos, case studies, and tech stack. Compares these signals against the stated ICP and generates refinements with confidence scores. Use this BEFORE activating an ICP to validate assumptions. IMPORTANT: After receiving results, you MUST analyse them critically — identify contradictions, gaps, and surprises — then present findings to the user with specific refinement recommendations. Do NOT auto-activate.",
         "input_schema": {
             "type": "object",
             "properties": {

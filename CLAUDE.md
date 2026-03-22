@@ -10,15 +10,15 @@ The `gtm_*` tools exist because raw API calls skip deduplication, enrichment wat
 
 ## Confirmation Gates (NEVER skip these)
 
-The pipeline has 5 mandatory checkpoints where you MUST stop and get human approval:
+The pipeline has mandatory checkpoints where you MUST stop and get human approval.
 
-| Gate | When | What to present |
-|------|------|----------------|
-| **Preflight** | Before anything | DB connectivity, provider status, credit budget |
-| **Gate 1** | After drafting ICP | Full ICP definition for review |
-| **Gate 2** | After ICP challenge | Challenge findings + refined ICP for approval |
-| **Gate 3** | Before company discovery | Campaign plan, search queries, credit estimate |
-| **Gate 4** | Before enrichment | Contact count, credit cost estimate, balance |
+| Gate | When | Your job | What to show the user |
+|------|------|----------|----------------------|
+| **Preflight** | Before anything | Run `gtm_preflight_check` | DB status, provider status, credit budget. If anything failed, say what and stop. |
+| **Gate 1** | After drafting ICP, before challenge | Scrutinise your own ICP draft — does it actually match what the client does? | The full ICP table (industries, geos, sizes, titles, keywords, exclusions) AND your reasoning for each choice. Flag anything you're uncertain about. |
+| **Gate 2** | After ICP challenge, before activation | Analyse the challenge results. Identify contradictions, gaps, and surprises. Propose specific refinements. | Side-by-side: original ICP vs. what the website/client-base analysis revealed. List every proposed change with your confidence level and why. |
+| **Gate 3** | Before company discovery | Plan the search queries. Estimate credit usage. | Campaign targeting, the exact search queries you'll run, estimated credits per query. |
+| **Gate 4** | Before enrichment | Count contacts, estimate cost. | How many contacts, estimated credits, current balance. |
 
 **The rule is simple: if it costs credits or shapes the campaign, ask first.**
 
@@ -51,30 +51,76 @@ gtm_create_client        — Create (or find via gtm_list_clients) the client re
 
 ### 2. ICP Definition & Challenge
 
+This is the most important stage. A bad ICP poisons everything downstream — wrong companies, wrong contacts, wasted credits. Your job is to be rigorous here, not fast.
+
+#### Step 2a: Research the client BEFORE drafting the ICP
+
+Before you write a single ICP field, do your homework:
+- Read the client's website (use WebFetch on their homepage, /about, /pricing, /customers pages)
+- Understand: What do they sell? To whom? What size companies? Which industries? Which geographies?
+- Look at their existing customer logos / case studies if visible
+- Check the campaign brief (if provided) for stated objectives
+
+Do NOT just parrot back what the user said. Cross-reference their brief against what you see on the website. If the user says "target fintech" but their website shows healthcare case studies, that's a flag.
+
+#### Step 2b: Draft the ICP
+
 ```
-gtm_create_icp           — Define the Ideal Customer Profile (industries, geos, sizes, titles, keywords)
+gtm_create_icp           — Define the Ideal Customer Profile
 ```
 
-**⛔ CONFIRMATION GATE 1: Present the draft ICP to the user BEFORE challenging.**
-Show them: industries, geographies, company sizes, target titles, keywords, exclusions.
-Ask: "Does this ICP look right, or should I adjust anything before I validate it against the website?"
-Wait for their response.
+**⛔ GATE 1: Present the draft ICP to the user with your reasoning.**
+
+Show a clear table:
+
+| Field | Value | Why |
+|-------|-------|-----|
+| Industries | e.g. SaaS, Fintech | "Based on your website showing X and brief stating Y" |
+| Geographies | e.g. UK, US | "Your case studies are all UK-based, expanding to US per brief" |
+| Company size | e.g. 50–500 | "Pricing page suggests mid-market, not enterprise" |
+| Target titles | e.g. VP Sales, CRO | "Your product is a sales tool — these are the buyers" |
+| Keywords | e.g. revenue operations | "Matches your value prop language" |
+| Exclusions | e.g. consulting, agencies | "Not your target based on product fit" |
+
+Flag anything you're unsure about: "I'm not confident about X — your website suggests A but your brief says B. Which is right?"
+
+**Wait for the user to approve or adjust. Do NOT proceed until they confirm.**
+
+#### Step 2c: Challenge the ICP against the website
 
 ```
 gtm_challenge_icp        — Deep-scrape the client's website to validate ICP assumptions
-gtm_refine_icp           — Iterate based on challenge findings (may repeat)
 ```
 
-**⛔ CONFIRMATION GATE 2: Present challenge findings + proposed refinements BEFORE activating.**
-Show them: what the challenge found, what refinements you recommend, the final ICP definition.
-Ask: "Here's what the website analysis revealed. Should I activate this ICP or make changes?"
-Wait for their response.
+This tool crawls the client's website (homepage, pricing, about, customers, case studies, solutions pages) and compares what it finds against your ICP definition. It generates confidence-scored refinements.
+
+#### Step 2d: Analyse the challenge results and propose refinements
+
+**⛔ GATE 2: Present the challenge findings with a critical eye.**
+
+Your job here is to be the skeptic. Show the user:
+
+1. **Contradictions** — "The ICP says mid-market (50-500), but the website shows logos of companies with 5,000+ employees. Should we expand the size range?"
+2. **Missing signals** — "The website heavily features healthcare customers, but the ICP doesn't include healthcare as an industry. Should we add it?"
+3. **Confirmations** — "The ICP targets VP Sales — this matches the website's persona language."
+4. **Recommended refinements** — For each proposed change, state what you'd change and why, with confidence (high/medium/low).
+
+If the challenge reveals the ICP needs changes:
+```
+gtm_refine_icp           — Create a new version with the proposed changes
+```
+
+Present the refined ICP side-by-side with the original. Explain every change.
+
+**Wait for the user to approve. Do NOT activate without explicit confirmation.**
+
+#### Step 2e: Activate
 
 ```
 gtm_activate_icp         — Lock in the final ICP (only after human approval)
 ```
 
-Do NOT skip the challenge step. It catches bad assumptions before they contaminate the entire pipeline.
+Only call this after the user has explicitly approved the (possibly refined) ICP.
 
 ### 3. Campaign Creation
 
