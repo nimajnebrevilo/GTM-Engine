@@ -323,3 +323,109 @@ def get_cost_summary() -> dict:
 
 def get_engine_status() -> dict:
     return _run("status")
+
+
+# ── Preflight Check ──────────────────────────────────────────────────────
+
+
+def preflight_check() -> dict:
+    """
+    Run a comprehensive preflight check before starting any pipeline work.
+
+    Tests:
+      1. Database connectivity (can we reach Supabase?)
+      2. Provider API keys (which are configured?)
+      3. Credit budget (do we have headroom?)
+
+    Returns a structured report with pass/fail for each check
+    and an overall "ready" boolean.
+    """
+    checks: dict = {
+        "database": {"status": "unknown", "detail": ""},
+        "providers": {"status": "unknown", "detail": {}},
+        "credits": {"status": "unknown", "detail": {}},
+        "ready": False,
+    }
+
+    # 1. Database connectivity — try listing clients (lightest query)
+    try:
+        result = _run("client:list", timeout=15)
+        if isinstance(result, list):
+            checks["database"] = {
+                "status": "ok",
+                "detail": f"Connected. {len(result)} client(s) in database.",
+            }
+        else:
+            checks["database"] = {
+                "status": "ok",
+                "detail": "Connected (response received).",
+            }
+    except EngineError as e:
+        msg = str(e)
+        if "fetch failed" in msg.lower() or "econnrefused" in msg.lower() or "timeout" in msg.lower():
+            checks["database"] = {
+                "status": "fail",
+                "detail": f"Cannot reach database: {msg}. Check SUPABASE_URL and network connectivity.",
+            }
+        else:
+            checks["database"] = {
+                "status": "fail",
+                "detail": f"Database error: {msg}",
+            }
+    except Exception as e:
+        checks["database"] = {
+            "status": "fail",
+            "detail": f"Unexpected error: {type(e).__name__}: {e}",
+        }
+
+    # 2. Provider status (API keys configured?)
+    try:
+        status = _run("status", timeout=15)
+        providers = status.get("providers", {})
+        configured = [k for k, v in providers.items() if v]
+        missing = [k for k, v in providers.items() if not v]
+        checks["providers"] = {
+            "status": "ok" if configured else "fail",
+            "detail": {
+                "configured": configured,
+                "missing": missing,
+            },
+        }
+    except Exception as e:
+        checks["providers"] = {
+            "status": "fail",
+            "detail": f"Could not check providers: {e}",
+        }
+
+    # 3. Credit budget
+    try:
+        costs = _run("cost:summary", timeout=15)
+        checks["credits"] = {
+            "status": "ok",
+            "detail": costs,
+        }
+    except Exception as e:
+        # Credit check failure is non-fatal if DB is down (costs are DB-backed)
+        checks["credits"] = {
+            "status": "warn" if checks["database"]["status"] == "fail" else "fail",
+            "detail": f"Could not check credits: {e}",
+        }
+
+    # Overall readiness
+    db_ok = checks["database"]["status"] == "ok"
+    providers_ok = checks["providers"]["status"] == "ok"
+    checks["ready"] = db_ok and providers_ok
+
+    if not checks["ready"]:
+        blockers = []
+        if not db_ok:
+            blockers.append("Database unreachable — all pipeline operations will fail")
+        if not providers_ok:
+            blockers.append("No API providers configured — discovery/enrichment impossible")
+        checks["blockers"] = blockers
+        checks["recommendation"] = (
+            "Do NOT proceed with the pipeline. Fix the blockers above first. "
+            "Present this preflight report to the user and ask how they want to proceed."
+        )
+
+    return checks
