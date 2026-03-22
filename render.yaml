@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: gtm-engine-mcp
+    runtime: docker
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: MCP_AUTH_TOKEN
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: APOLLO_API_KEY
+        sync: false
+      - key: EXA_API_KEY
+        sync: false
+      - key: PROSPEO_API_KEY
+        sync: false
+      - key: MILLION_VERIFIER_API_KEY
+        sync: false
