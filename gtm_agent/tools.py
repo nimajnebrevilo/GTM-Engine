@@ -369,4 +369,19 @@ TOOLS = [
             "properties": {},
         },
     },
+    # ── Preflight ──────────────────────────────────────────────────────────
+    {
+        "name": "preflight_check",
+        "description": (
+            "MANDATORY first step before ANY prospecting work. "
+            "Tests database connectivity, provider API keys, and credit budget in one call. "
+            "Returns a structured pass/fail report with an overall 'ready' boolean. "
+            "If ready=false, STOP and present the blockers to the user — do NOT proceed with the pipeline. "
+            "If ready=true, present the preflight summary to the user and wait for confirmation before continuing."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
 ]

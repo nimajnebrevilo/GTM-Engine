@@ -8,15 +8,44 @@ The `gtm_*` tools exist because raw API calls skip deduplication, enrichment wat
 
 ---
 
+## Confirmation Gates (NEVER skip these)
+
+The pipeline has 5 mandatory checkpoints where you MUST stop and get human approval:
+
+| Gate | When | What to present |
+|------|------|----------------|
+| **Preflight** | Before anything | DB connectivity, provider status, credit budget |
+| **Gate 1** | After drafting ICP | Full ICP definition for review |
+| **Gate 2** | After ICP challenge | Challenge findings + refined ICP for approval |
+| **Gate 3** | Before company discovery | Campaign plan, search queries, credit estimate |
+| **Gate 4** | Before enrichment | Contact count, credit cost estimate, balance |
+
+**The rule is simple: if it costs credits or shapes the campaign, ask first.**
+
+Never assume the user's intent. Never auto-proceed through a gate. Present your findings clearly and wait for explicit approval.
+
+---
+
 ## Required Workflow
 
 Every prospecting engagement MUST follow this pipeline in order. Do not skip steps.
 
+### 0. Preflight (MANDATORY — always run first)
+
+```
+gtm_preflight_check      — Tests DB connectivity, provider keys, and credit budget in one call
+```
+
+**This is the very first thing you do. No exceptions.**
+
+- If `ready: false` → STOP. Present the blockers to the user. Do NOT proceed.
+- If `ready: true` → Present the preflight summary to the user and WAIT for them to confirm before continuing.
+
+Do NOT silently proceed after preflight. The user must see the results and say "go" before you create clients, ICPs, or campaigns.
+
 ### 1. Setup
 
 ```
-gtm_get_engine_status    — Check which providers are configured
-gtm_get_cost_summary     — Check credit budget before starting
 gtm_create_client        — Create (or find via gtm_list_clients) the client record
 ```
 
@@ -24,8 +53,24 @@ gtm_create_client        — Create (or find via gtm_list_clients) the client re
 
 ```
 gtm_create_icp           — Define the Ideal Customer Profile (industries, geos, sizes, titles, keywords)
+```
+
+**⛔ CONFIRMATION GATE 1: Present the draft ICP to the user BEFORE challenging.**
+Show them: industries, geographies, company sizes, target titles, keywords, exclusions.
+Ask: "Does this ICP look right, or should I adjust anything before I validate it against the website?"
+Wait for their response.
+
+```
 gtm_challenge_icp        — Deep-scrape the client's website to validate ICP assumptions
 gtm_refine_icp           — Iterate based on challenge findings (may repeat)
+```
+
+**⛔ CONFIRMATION GATE 2: Present challenge findings + proposed refinements BEFORE activating.**
+Show them: what the challenge found, what refinements you recommend, the final ICP definition.
+Ask: "Here's what the website analysis revealed. Should I activate this ICP or make changes?"
+Wait for their response.
+
+```
 gtm_activate_icp         — Lock in the final ICP (only after human approval)
 ```
 
@@ -36,6 +81,11 @@ Do NOT skip the challenge step. It catches bad assumptions before they contamina
 ```
 gtm_create_campaign      — Create a campaign linked to the client, with targeting criteria
 ```
+
+**⛔ CONFIRMATION GATE 3: Present the campaign plan BEFORE running company discovery.**
+Show them: campaign name, targeting criteria, search queries you plan to run, estimated credit usage.
+Ask: "Ready to start company discovery? This will use Apollo + Exa credits."
+Wait for their response.
 
 ### 4. Company Discovery
 
@@ -75,6 +125,11 @@ gtm_search_people        — Find decision-makers at target companies by title, 
 
 ### 8. Contact Enrichment
 
+**⛔ CONFIRMATION GATE 4: Present the enrichment plan BEFORE enriching.**
+Show them: how many contacts you plan to enrich, estimated credit cost, current credit balance.
+Ask: "Ready to enrich N contacts? This will use approximately X Apollo + Y Prospeo credits."
+Wait for their response.
+
 ```
 gtm_enrich_contact       — Waterfall enrichment: Apollo → Prospeo → Freckle, with Million Verifier inline
 gtm_bulk_verify_emails   — Final sweep of all emails before export
@@ -107,6 +162,9 @@ These patterns indicate the engine is being bypassed. Do NOT do any of the follo
 | Skip email verification | Always run `gtm_bulk_verify_emails` before export |
 | Skip signal detection for Tier 1 companies | Always run `gtm_detect_signals` |
 | Trust Apollo "verified" emails without waterfall | Use `gtm_enrich_contact` (runs full waterfall) |
+| Skip preflight check | Always run `gtm_preflight_check` as the very first step |
+| Auto-proceed past a confirmation gate | Always present findings and wait for human approval |
+| Assume ICP parameters without asking | Present draft ICP and get explicit approval |
 
 ### When raw provider tools ARE acceptable
 
@@ -123,7 +181,7 @@ They are NEVER acceptable as a substitute for the engine pipeline during a prosp
 
 Before delivering any campaign output, verify:
 
-- [ ] Client record exists in the database (`gtm_list_clients`)
+- [ ] Preflight check passed (`gtm_preflight_check` returned `ready: true`)
 - [ ] ICP was challenged against the client's website (`gtm_challenge_icp`)
 - [ ] ICP was approved and activated (`gtm_activate_icp`)
 - [ ] Campaign record exists (`gtm_list_campaigns`)

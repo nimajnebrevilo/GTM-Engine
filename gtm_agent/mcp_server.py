@@ -88,6 +88,7 @@ def execute_tool(name: str, args: dict[str, Any]) -> str:
         "export_campaign": lambda: engine.export_campaign(**args),
         "get_cost_summary": lambda: engine.get_cost_summary(),
         "get_engine_status": lambda: engine.get_engine_status(),
+        "preflight_check": lambda: engine.preflight_check(),
     }
 
     fn = dispatch.get(clean_name)
