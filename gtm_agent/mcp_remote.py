@@ -229,7 +229,7 @@ def main() -> None:
     import uvicorn
 
     host = os.environ.get("MCP_HOST", "0.0.0.0")
-    port = int(os.environ.get("MCP_PORT", "8080"))
+    port = int(os.environ.get("PORT", os.environ.get("MCP_PORT", "8080")))
 
     logger.info("Starting GTM Engine MCP remote server on %s:%d", host, port)
     uvicorn.run(
