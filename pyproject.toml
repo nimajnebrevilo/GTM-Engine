@@ -14,7 +14,13 @@ dependencies = [
 mcp = [
     "mcp[cli]>=1.9.0",
 ]
+remote = [
+    "mcp[cli]>=1.9.0",
+    "uvicorn>=0.30.0",
+    "starlette>=0.38.0",
+]
 
 [project.scripts]
 gtm-agent = "gtm_agent.agent:main"
 gtm-mcp = "gtm_agent.mcp_server:main"
+gtm-mcp-remote = "gtm_agent.mcp_remote:main"
