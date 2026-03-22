@@ -97,6 +97,11 @@ class BearerTokenMiddleware:
             await self.app(scope, receive, send)
             return
 
+        # If no AUTH_TOKEN configured, skip auth (authless mode for Claude CoWork)
+        if not AUTH_TOKEN:
+            await self.app(scope, receive, send)
+            return
+
         # Extract token from Authorization header
         headers = dict(scope.get("headers", []))
         auth_header = headers.get(b"authorization", b"").decode()
@@ -105,7 +110,7 @@ class BearerTokenMiddleware:
         if auth_header.lower().startswith("bearer "):
             token = auth_header[7:]
 
-        if not AUTH_TOKEN or not token or not hmac.compare_digest(token, AUTH_TOKEN):
+        if not token or not hmac.compare_digest(token, AUTH_TOKEN):
             response = JSONResponse(
                 {"error": "Unauthorized — invalid or missing bearer token"},
                 status_code=401,
