@@ -147,6 +147,32 @@ This is NOT the same as calling `apollo_mixed_companies_search` directly. The en
 
 Run multiple searches with different queries to maximize coverage. Each call can return up to 25 results per provider.
 
+#### Location-Based Company Search (Supabase)
+
+When filtering or querying discovered companies by location in Supabase (project: `dnepejjdqylzkqefnjbt`), use these approaches in order of preference:
+
+**Preferred: Use the search function** — handles city, state, county, and postal code lookups with automatic fallback:
+```sql
+SELECT * FROM search_companies_by_location('San Francisco');
+SELECT * FROM search_companies_by_location('NY');
+SELECT * FROM search_companies_by_location('10001');
+```
+This searches city/state/county on the company record first. If no match, it falls back to the `postal_codes` lookup table.
+
+**For queries/joins: Use the view** — provides resolved location fields with postal code fallback:
+```sql
+SELECT resolved_city, resolved_state, resolved_county, resolved_region
+FROM companies_with_location
+WHERE resolved_state = 'CA';
+```
+The `companies_with_location` view resolves location from the company's own fields first, falling back to a `postal_codes` JOIN when empty. Always use `resolved_*` columns instead of raw `city`/`state`/`county`/`region`.
+
+**Direct table columns** — fastest, but data may be incomplete during backfill:
+The `companies` table has: `city`, `state`, `county`, `region`, `postal_code`, `country`. These are being backfilled from the `postal_codes` lookup table. Once complete, direct queries are faster than the view.
+
+**Reference: Postal codes table**
+`postal_codes` contains 42,735 US and 2,856 UK entries with: `postal_code`, `city`, `state`, `county`, `region`, `country_code`.
+
 ### 5. Signal Detection
 
 ```
