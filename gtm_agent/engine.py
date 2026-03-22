@@ -337,14 +337,20 @@ def preflight_check() -> dict:
       2. Provider API keys (which are configured?)
       3. Credit budget (do we have headroom?)
 
-    Returns a structured report with pass/fail for each check
-    and an overall "ready" boolean.
+    If Supabase is unreachable, automatically switches to degraded mode
+    (local JSON storage + WebSearch for discovery).
+
+    Returns a structured report with pass/fail for each check,
+    an overall "ready" boolean, and "mode" (full | degraded).
     """
+    from gtm_agent import degraded_mode
+
     checks: dict = {
         "database": {"status": "unknown", "detail": ""},
         "providers": {"status": "unknown", "detail": {}},
         "credits": {"status": "unknown", "detail": {}},
         "ready": False,
+        "mode": "full",
     }
 
     # 1. Database connectivity — try listing clients (lightest query)
@@ -353,19 +359,19 @@ def preflight_check() -> dict:
         if isinstance(result, list):
             checks["database"] = {
                 "status": "ok",
-                "detail": f"Connected. {len(result)} client(s) in database.",
+                "detail": f"Connected to Supabase. {len(result)} client(s) in database.",
             }
         else:
             checks["database"] = {
                 "status": "ok",
-                "detail": "Connected (response received).",
+                "detail": "Connected to Supabase (response received).",
             }
     except EngineError as e:
         msg = str(e)
-        if "fetch failed" in msg.lower() or "econnrefused" in msg.lower() or "timeout" in msg.lower():
+        if "fetch failed" in msg.lower() or "econnrefused" in msg.lower() or "timeout" in msg.lower() or "proxy" in msg.lower():
             checks["database"] = {
                 "status": "fail",
-                "detail": f"Cannot reach database: {msg}. Check SUPABASE_URL and network connectivity.",
+                "detail": f"Cannot reach Supabase: {msg}. Likely blocked by egress proxy.",
             }
         else:
             checks["database"] = {
@@ -405,27 +411,53 @@ def preflight_check() -> dict:
             "detail": costs,
         }
     except Exception as e:
-        # Credit check failure is non-fatal if DB is down (costs are DB-backed)
         checks["credits"] = {
             "status": "warn" if checks["database"]["status"] == "fail" else "fail",
             "detail": f"Could not check credits: {e}",
         }
 
-    # Overall readiness
+    # Determine mode
     db_ok = checks["database"]["status"] == "ok"
     providers_ok = checks["providers"]["status"] == "ok"
-    checks["ready"] = db_ok and providers_ok
 
-    if not checks["ready"]:
-        blockers = []
-        if not db_ok:
-            blockers.append("Database unreachable — all pipeline operations will fail")
-        if not providers_ok:
-            blockers.append("No API providers configured — discovery/enrichment impossible")
-        checks["blockers"] = blockers
+    if db_ok and providers_ok:
+        # Full mode — everything works
+        checks["ready"] = True
+        checks["mode"] = "full"
+        degraded_mode.set_degraded(False)
+    elif not db_ok:
+        # Database unreachable — switch to degraded mode
+        degraded_mode.set_degraded(True)
+        checks["mode"] = "degraded"
+        checks["ready"] = True  # Ready in degraded mode
+        checks["degraded_mode"] = {
+            "database": "local JSON files (data/local_store/)",
+            "company_discovery": "WebSearch (you run the searches, then save results via gtm_save_companies)",
+            "signal_detection": "WebSearch (you run the searches, then save results via gtm_save_signals)",
+            "people_search": "WebSearch (you search LinkedIn, then save results via gtm_save_contacts)",
+            "icp_challenge": "Manual (you WebFetch the client's website pages and do the analysis)",
+            "enrichment": "NOT AVAILABLE (email/phone finding requires API access)",
+            "tam_scoring": "Local scoring against stored companies",
+            "export": "Local JSON export from data/local_store/",
+        }
+        checks["message"] = (
+            "Supabase is unreachable (likely blocked by egress proxy). "
+            "Switching to DEGRADED MODE: local storage + WebSearch.\n\n"
+            "The pipeline still works, but:\n"
+            "- YOU must run WebSearch queries and feed results back via gtm_save_* tools\n"
+            "- Email/phone enrichment is NOT available (needs Apollo/Prospeo APIs)\n"
+            "- Data is stored locally in JSON files, not Supabase\n"
+            "- All confirmation gates still apply\n\n"
+            "Present this to the user and confirm they want to proceed in degraded mode."
+        )
+    else:
+        # DB works but no providers
+        checks["ready"] = False
+        checks["mode"] = "full"
+        checks["blockers"] = ["No API providers configured — discovery/enrichment impossible"]
         checks["recommendation"] = (
-            "Do NOT proceed with the pipeline. Fix the blockers above first. "
-            "Present this preflight report to the user and ask how they want to proceed."
+            "Do NOT proceed. No provider API keys are configured. "
+            "Present this to the user."
         )
 
     return checks

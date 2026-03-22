@@ -241,6 +241,59 @@ Before delivering any campaign output, verify:
 
 ---
 
+## Degraded Mode (WebSearch + Local Storage)
+
+When `gtm_preflight_check` returns `mode: "degraded"`, it means the egress proxy is blocking Supabase and provider APIs. The pipeline still works, but you become the search engine.
+
+### What changes in degraded mode
+
+| Stage | Full Mode | Degraded Mode |
+|-------|-----------|---------------|
+| Database | Supabase | Local JSON files (`data/local_store/`) |
+| Company discovery | Exa + Apollo APIs | **You run WebSearch**, then call `gtm_save_companies` |
+| Signal detection | Exa API | **You run WebSearch**, then call `gtm_save_signals` |
+| ICP challenge | Engine deep-scrapes website | **You use WebFetch** on client pages and do the analysis |
+| People search | Apollo API | **You run WebSearch** (LinkedIn), then call `gtm_save_contacts` |
+| TAM scoring | Engine scores in DB | Engine scores locally (still automatic) |
+| Enrichment | Apollo/Prospeo/Freckle waterfall | **NOT AVAILABLE** — tell the user |
+| Email verification | Million Verifier | **NOT AVAILABLE** — tell the user |
+| Export | From Supabase | From local JSON files |
+
+### How to run discovery in degraded mode
+
+When `gtm_search_companies` returns `action_required: "websearch_company_discovery"`:
+
+1. Run **3-5 WebSearch queries** with variations of the ICP description
+2. Extract structured company data from search results: name, domain, description, industry, employee count, country
+3. Call `gtm_save_companies` with the array of companies
+4. Present results to user at Gate 3 as normal
+
+When `gtm_detect_signals` returns `action_required: "websearch_signal_detection"`:
+
+1. Run **WebSearch queries** for each signal type: `"{domain} funding 2026"`, `"{domain} new hire"`, etc.
+2. Extract: signal type, headline, source URL, date
+3. Call `gtm_save_signals` with domain and signals array
+
+When `gtm_search_people` returns `action_required: "websearch_people_discovery"`:
+
+1. Run **WebSearch** for `"{domain} {title} site:linkedin.com"`
+2. Extract: first name, last name, title, LinkedIn URL, company
+3. Call `gtm_save_contacts` with the array
+
+### What to tell the user in degraded mode
+
+Be upfront:
+- "External APIs are blocked by the network proxy. I'm running in degraded mode."
+- "I'll use web search for company discovery and signals — results may be less comprehensive than the full API pipeline."
+- "Email/phone enrichment is NOT available — I can find people and titles but can't get verified contact details."
+- "All data is stored locally. When you have full API access, we can re-run with the complete pipeline."
+
+### Confirmation gates still apply
+
+All 4 gates apply exactly the same way in degraded mode. The quality bar doesn't drop just because the tools are limited.
+
+---
+
 ## Skills
 
 Skill documentation lives in `skills/`. Each skill has its own `SKILL.md` with usage instructions. Skills are self-contained workflows that may use raw provider APIs directly — this is acceptable because the skill docs define their own quality controls.

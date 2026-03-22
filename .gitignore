@@ -5,3 +5,4 @@ dist/
 src/gtm_agent.egg-info/
 __pycache__/
 *.egg-info/
+data/local_store/
