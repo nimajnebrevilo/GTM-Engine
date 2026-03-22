@@ -2,6 +2,7 @@ services:
   - type: web
     name: gtm-engine-mcp
     runtime: docker
+    dockerfilePath: ./Dockerfile
     plan: starter
     healthCheckPath: /health
     envVars:
