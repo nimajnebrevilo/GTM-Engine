@@ -55,6 +55,7 @@ import logging
 
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
@@ -75,8 +76,9 @@ AUTH_TOKEN = os.environ.get("MCP_AUTH_TOKEN", "")
 
 if not AUTH_TOKEN:
     print(
-        "WARNING: MCP_AUTH_TOKEN is not set. The server will reject ALL requests.\n"
-        "Generate one with:  python3 -c \"import secrets; print(secrets.token_urlsafe(48))\"",
+        "INFO: MCP_AUTH_TOKEN is not set — running in authless mode.\n"
+        "This is normal for Claude CoWork connectors (which use OAuth 2.1).\n"
+        "To require a static token, set MCP_AUTH_TOKEN in your environment.",
         file=sys.stderr,
     )
 
@@ -217,6 +219,22 @@ def create_app() -> Starlette:
             Mount("/", app=mcp_http),
         ],
         middleware=[
+            Middleware(
+                CORSMiddleware,
+                allow_origins=["*"],
+                allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+                allow_headers=[
+                    "Content-Type",
+                    "Accept",
+                    "Authorization",
+                    "Mcp-Session-Id",
+                    "Last-Event-ID",
+                ],
+                expose_headers=[
+                    "Content-Type",
+                    "Mcp-Session-Id",
+                ],
+            ),
             Middleware(BearerTokenMiddleware),
         ],
     )
