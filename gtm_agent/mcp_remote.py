@@ -54,11 +54,10 @@ import json
 import logging
 
 from starlette.applications import Starlette
-from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from starlette.routing import Mount, Route
+from starlette.routing import Route
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from mcp.server.fastmcp import FastMCP
@@ -209,36 +208,33 @@ async def health(request: Request) -> JSONResponse:
 
 def create_app() -> Starlette:
     """Create the ASGI app with auth middleware and MCP endpoint."""
-    # FastMCP.streamable_http_app() returns a Starlette app with a /mcp route.
-    # Mount it at the root so /mcp is served correctly.
-    mcp_http = mcp.streamable_http_app()
+    # Use the MCP app as the root so its lifespan runs properly.
+    # (Mounting under another Starlette app breaks lifespan propagation.)
+    mcp_app = mcp.streamable_http_app()
 
-    app = Starlette(
-        routes=[
-            Route("/health", health, methods=["GET"]),
-            Mount("/", app=mcp_http),
+    # Insert health route before the MCP routes
+    mcp_app.routes.insert(0, Route("/health", health, methods=["GET"]))
+
+    # Add middleware (CORS first, then auth)
+    mcp_app.add_middleware(BearerTokenMiddleware)
+    mcp_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+        allow_headers=[
+            "Content-Type",
+            "Accept",
+            "Authorization",
+            "Mcp-Session-Id",
+            "Last-Event-ID",
         ],
-        middleware=[
-            Middleware(
-                CORSMiddleware,
-                allow_origins=["*"],
-                allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-                allow_headers=[
-                    "Content-Type",
-                    "Accept",
-                    "Authorization",
-                    "Mcp-Session-Id",
-                    "Last-Event-ID",
-                ],
-                expose_headers=[
-                    "Content-Type",
-                    "Mcp-Session-Id",
-                ],
-            ),
-            Middleware(BearerTokenMiddleware),
+        expose_headers=[
+            "Content-Type",
+            "Mcp-Session-Id",
         ],
     )
-    return app
+
+    return mcp_app
 
 
 app = create_app()
