@@ -61,6 +61,7 @@ from starlette.routing import Route
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from gtm_agent import engine
 from gtm_agent.tools import TOOLS
@@ -129,6 +130,9 @@ class BearerTokenMiddleware:
 mcp = FastMCP(
     "gtm-engine",
     stateless_http=True,  # Claude.ai connectors are stateless
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=False,
+    ),
 )
 
 
