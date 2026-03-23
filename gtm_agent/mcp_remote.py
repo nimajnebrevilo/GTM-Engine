@@ -60,6 +60,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+import mcp.types as mcp_types
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
@@ -136,24 +137,6 @@ mcp = FastMCP(
 )
 
 
-def _register_tool(tool_def: dict) -> None:
-    """Register a GTM engine tool on the FastMCP server."""
-    name = tool_def["name"]
-    description = f"[GTM Engine] {tool_def['description']}"
-    schema = tool_def["input_schema"]
-
-    # Build the tool function dynamically
-    async def _handler(**kwargs: object) -> str:
-        return _execute(name, kwargs)
-
-    # Give the function a proper name for FastMCP
-    _handler.__name__ = f"gtm_{name}"
-    _handler.__qualname__ = f"gtm_{name}"
-    _handler.__doc__ = description
-
-    mcp.tool(name=f"gtm_{name}", description=description)(_handler)
-
-
 def _execute(tool_name: str, args: dict) -> str:
     """Execute a GTM engine tool (sync) and return JSON."""
     dispatch = {
@@ -193,9 +176,52 @@ def _execute(tool_name: str, args: dict) -> str:
         return json.dumps({"error": f"{type(e).__name__}: {e}"})
 
 
-# Register all tools
-for _tool in TOOLS:
-    _register_tool(_tool)
+# ---------------------------------------------------------------------------
+# Register tools on the low-level MCP server with explicit schemas.
+#
+# FastMCP's @mcp.tool() decorator infers input schemas from the Python
+# function signature.  Because our handlers use **kwargs (they're thin
+# dispatchers to the engine), FastMCP generates a useless schema like
+# {"properties": {"kwargs": …}}.  The *real* schemas live in tools.py.
+#
+# To fix this we register directly on the low-level Server that FastMCP
+# wraps, giving us full control over the inputSchema advertised to clients.
+# ---------------------------------------------------------------------------
+
+# Build the protocol Tool objects from our definitions
+_TOOL_OBJECTS: list[mcp_types.Tool] = [
+    mcp_types.Tool(
+        name=f"gtm_{t['name']}",
+        description=f"[GTM Engine] {t['description']}",
+        inputSchema=t["input_schema"],
+    )
+    for t in TOOLS
+]
+
+# Map protocol tool names back to engine tool names
+_TOOL_NAME_MAP: dict[str, str] = {
+    f"gtm_{t['name']}": t["name"] for t in TOOLS
+}
+
+
+@mcp._mcp_server.list_tools()
+async def _handle_list_tools() -> list[mcp_types.Tool]:
+    return _TOOL_OBJECTS
+
+
+@mcp._mcp_server.call_tool()
+async def _handle_call_tool(
+    name: str, arguments: dict,
+) -> list[mcp_types.TextContent]:
+    engine_name = _TOOL_NAME_MAP.get(name)
+    if not engine_name:
+        return [mcp_types.TextContent(
+            type="text",
+            text=json.dumps({"error": f"Unknown tool: {name}"}),
+        )]
+
+    result_json = _execute(engine_name, arguments or {})
+    return [mcp_types.TextContent(type="text", text=result_json)]
 
 
 # ---------------------------------------------------------------------------
