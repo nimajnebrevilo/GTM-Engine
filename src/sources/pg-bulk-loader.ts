@@ -13,6 +13,7 @@ import { parse } from 'csv-parse';
 import pg from 'pg';
 import { normalizeName, extractDomain } from '../db/queries/companies.js';
 import { categoriseIndustry } from './bulk-csv-loader.js';
+import { bulkImportCompanies } from '../lib/bulk-import.js';
 
 const { Pool } = pg;
 
@@ -154,52 +155,21 @@ const COLUMNS = [
 
 const BATCH_SIZE = 2000;
 
-async function flushBatch(pool: pg.Pool, batch: CompanyInsert[]): Promise<{ inserted: number; errors: number }> {
+async function flushBatch(_pool: pg.Pool, batch: CompanyInsert[]): Promise<{ inserted: number; errors: number }> {
   if (batch.length === 0) return { inserted: 0, errors: 0 };
 
-  // Build multi-row INSERT with parameterised values
-  const values: unknown[] = [];
-  const rowPlaceholders: string[] = [];
-  const colCount = COLUMNS.length;
-
-  for (let i = 0; i < batch.length; i++) {
-    const row = batch[i];
-    const offset = i * colCount;
-    const placeholders = COLUMNS.map((_, j) => `$${offset + j + 1}`);
-    rowPlaceholders.push(`(${placeholders.join(',')})`);
-
-    values.push(
-      row.name, row.name_normalized, row.domain, row.linkedin_url, row.website,
-      row.description, row.industry, row.sub_industry, row.employee_count, row.employee_range,
-      row.founded_year, row.company_type, row.city, row.postal_code, row.phone,
-      row.country, row.original_source, JSON.stringify(row.source_data), row.confidence_score, row.is_primary,
-    );
-  }
-
-  const sql = `INSERT INTO companies (${COLUMNS.join(',')}) VALUES ${rowPlaceholders.join(',')}`;
-
   try {
-    await pool.query(sql, values);
-    return { inserted: batch.length, errors: 0 };
+    const result = await bulkImportCompanies(
+      batch.map(row => ({
+        ...row,
+        source_data: row.source_data,
+      })),
+      'pg-bulk-loader',
+    );
+    return { inserted: result.inserted + result.updated, errors: result.errors };
   } catch (err) {
-    console.error(`  Batch error: ${(err as Error).message?.slice(0, 200)}. Retrying individually...`);
-    let inserted = 0;
-    let errors = 0;
-    const singleSql = `INSERT INTO companies (${COLUMNS.join(',')}) VALUES (${COLUMNS.map((_, j) => `$${j + 1}`).join(',')})`;
-    for (const row of batch) {
-      try {
-        await pool.query(singleSql, [
-          row.name, row.name_normalized, row.domain, row.linkedin_url, row.website,
-          row.description, row.industry, row.sub_industry, row.employee_count, row.employee_range,
-          row.founded_year, row.company_type, row.city, row.postal_code, row.phone,
-          row.country, row.original_source, JSON.stringify(row.source_data), row.confidence_score, row.is_primary,
-        ]);
-        inserted++;
-      } catch {
-        errors++;
-      }
-    }
-    return { inserted, errors };
+    console.error(`  Bulk import error: ${(err as Error).message?.slice(0, 200)}`);
+    return { inserted: 0, errors: batch.length };
   }
 }
 

@@ -7,6 +7,7 @@
  */
 
 import { getSupabaseClient } from '../client.js';
+import { bulkImportCampaignCompanies, bulkImportCampaignContacts } from '../../lib/bulk-import.js';
 
 // ---------------------------------------------------------------------------
 // Overlap & recency warnings
@@ -193,27 +194,19 @@ export async function assignCompaniesToCampaign(input: {
     ? []
     : await checkCompanyOverlaps(input.campaignId, companyIds);
 
-  let added = 0;
-  let skipped = 0;
+  const records = input.companies.map(company => ({
+    campaign_id: input.campaignId,
+    company_id: company.companyId,
+    icp_fit_score: company.icpFitScore ?? null,
+    segment: company.segment ?? null,
+  }));
 
-  for (const company of input.companies) {
-    const { error } = await db
-      .from('campaign_companies')
-      .upsert({
-        campaign_id: input.campaignId,
-        company_id: company.companyId,
-        icp_fit_score: company.icpFitScore ?? null,
-        segment: company.segment ?? null,
-      });
-
-    if (error) {
-      skipped++;
-    } else {
-      added++;
-    }
-  }
-
-  return { added, skipped, warnings };
+  const result = await bulkImportCampaignCompanies(records);
+  return {
+    added: result.inserted + result.updated,
+    skipped: result.errors,
+    warnings,
+  };
 }
 
 /**
@@ -230,25 +223,17 @@ export async function assignContactsToCampaign(input: {
     ? []
     : await checkContactOverlaps(input.campaignId, input.contactIds);
 
-  let added = 0;
-  let skipped = 0;
+  const records = input.contactIds.map(contactId => ({
+    campaign_id: input.campaignId,
+    contact_id: contactId,
+  }));
 
-  for (const contactId of input.contactIds) {
-    const { error } = await db
-      .from('campaign_contacts')
-      .upsert({
-        campaign_id: input.campaignId,
-        contact_id: contactId,
-      });
-
-    if (error) {
-      skipped++;
-    } else {
-      added++;
-    }
-  }
-
-  return { added, skipped, warnings };
+  const result = await bulkImportCampaignContacts(records);
+  return {
+    added: result.inserted + result.updated,
+    skipped: result.errors,
+    warnings,
+  };
 }
 
 /**

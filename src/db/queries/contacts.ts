@@ -4,6 +4,7 @@
  */
 
 import { getSupabaseClient } from '../client.js';
+import { bulkImportContacts } from '../../lib/bulk-import.js';
 
 export interface ContactRow {
   id: string;
@@ -44,27 +45,35 @@ export interface CreateContactInput {
 
 export async function createContact(input: CreateContactInput): Promise<ContactRow> {
   const db = getSupabaseClient();
-  const { data, error } = await db
-    .from('contacts')
-    .insert({
-      company_id: input.companyId ?? null,
-      first_name: input.firstName ?? null,
-      last_name: input.lastName ?? null,
-      email: input.email ?? null,
-      email_status: input.emailStatus ?? null,
-      title: input.title ?? null,
-      seniority: input.seniority ?? null,
-      department: input.department ?? null,
-      linkedin_url: input.linkedinUrl ?? null,
-      phone: input.phone ?? null,
-      apollo_id: input.apolloId ?? null,
-      original_source: input.originalSource ?? null,
-      raw_data: input.rawData ?? {},
-    })
-    .select()
-    .single();
+  const contactRecord = {
+    company_id: input.companyId ?? null,
+    first_name: input.firstName ?? null,
+    last_name: input.lastName ?? null,
+    email: input.email ?? null,
+    email_status: input.emailStatus ?? null,
+    title: input.title ?? null,
+    seniority: input.seniority ?? null,
+    department: input.department ?? null,
+    linkedin_url: input.linkedinUrl ?? null,
+    phone: input.phone ?? null,
+    apollo_id: input.apolloId ?? null,
+    original_source: input.originalSource ?? null,
+    raw_data: input.rawData ?? {},
+  };
 
-  if (error) throw new Error(`Failed to create contact: ${error.message}`);
+  const result = await bulkImportContacts([contactRecord], input.originalSource ?? 'gtm-engine');
+  if (result.errors > 0) throw new Error('Failed to create contact via bulk-import');
+
+  // Fetch the newly created contact to return it
+  let query = db.from('contacts').select().order('created_at', { ascending: false }).limit(1);
+  if (input.email) {
+    query = query.eq('email', input.email);
+  } else if (input.firstName && input.lastName && input.companyId) {
+    query = query.eq('first_name', input.firstName).eq('last_name', input.lastName).eq('company_id', input.companyId);
+  }
+  const { data, error } = await query.single();
+
+  if (error) throw new Error(`Failed to retrieve created contact: ${error.message}`);
   return data as ContactRow;
 }
 
