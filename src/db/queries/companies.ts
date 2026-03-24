@@ -6,6 +6,7 @@
 
 import { getSupabaseClient } from '../client.js';
 import type { RawCompanyRecord } from '../../sources/types.js';
+import { bulkImportCompanies } from '../../lib/bulk-import.js';
 
 export interface CompanyRow {
   id: string;
@@ -155,38 +156,47 @@ export async function upsertCompany(
     return { id: nameMatch.id, isNew: false };
   }
 
-  // Insert new record
-  const { data, error } = await db
-    .from('companies')
-    .insert({
-      name: record.name,
-      name_normalized: nameNormalized,
-      domain,
-      jurisdiction: record.jurisdiction ?? record.country ?? null,
-      registration_number: record.registrationNumber ?? null,
-      website: record.website ? (domain ? `https://${domain}` : record.website) : null,
-      description: record.description ?? null,
-      industry: record.industry ?? null,
-      sic_codes: record.sicCodes ?? null,
-      employee_count: record.employeeCount ?? null,
-      founded_year: record.foundedYear ?? null,
-      company_type: record.companyType ?? null,
-      address_line1: record.addressLine1 ?? null,
-      city: record.city ?? null,
-      region: record.region ?? null,
-      postal_code: record.postalCode ?? null,
-      country: record.country ?? null,
-      original_source: record.sourceName,
-      source_url: record.sourceUrl ?? null,
-      source_data: { [record.sourceName]: record.rawData },
-      confidence_score: 0.5,
-      is_primary: true,
-    })
-    .select('id')
-    .single();
+  // Insert new record via bulk-import Edge Function
+  const companyRecord = {
+    name: record.name,
+    name_normalized: nameNormalized,
+    domain,
+    jurisdiction: record.jurisdiction ?? record.country ?? null,
+    registration_number: record.registrationNumber ?? null,
+    website: record.website ? (domain ? `https://${domain}` : record.website) : null,
+    description: record.description ?? null,
+    industry: record.industry ?? null,
+    sic_codes: record.sicCodes ?? null,
+    employee_count: record.employeeCount ?? null,
+    founded_year: record.foundedYear ?? null,
+    company_type: record.companyType ?? null,
+    address_line1: record.addressLine1 ?? null,
+    city: record.city ?? null,
+    region: record.region ?? null,
+    postal_code: record.postalCode ?? null,
+    country: record.country ?? null,
+    original_source: record.sourceName,
+    source_url: record.sourceUrl ?? null,
+    source_data: { [record.sourceName]: record.rawData },
+    confidence_score: 0.5,
+    is_primary: true,
+  };
 
-  if (error) throw new Error(`Failed to insert company: ${error.message}`);
-  return { id: data.id, isNew: true };
+  const result = await bulkImportCompanies([companyRecord], record.sourceName);
+  if (result.errors > 0) throw new Error('Failed to insert company via bulk-import');
+
+  // Fetch the newly inserted record to get the ID
+  const { data: inserted, error: fetchError } = await db
+    .from('companies')
+    .select('id')
+    .eq('name_normalized', nameNormalized)
+    .eq('domain', domain ?? '')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (fetchError || !inserted) throw new Error('Failed to retrieve inserted company');
+  return { id: inserted.id, isNew: true };
 }
 
 /**

@@ -13,6 +13,7 @@ import { join } from 'path';
 import { parse } from 'csv-parse';
 import { getSupabaseClient } from '../db/client.js';
 import { normalizeName, extractDomain } from '../db/queries/companies.js';
+import { bulkImportCompanies } from '../lib/bulk-import.js';
 
 // ---------------------------------------------------------------------------
 // Industry categorisation
@@ -551,26 +552,14 @@ async function loadCsvFile(
 }
 
 async function flushBatch(
-  db: ReturnType<typeof getSupabaseClient>,
+  _db: ReturnType<typeof getSupabaseClient>,
   batch: Record<string, unknown>[],
 ): Promise<{ inserted: number; errors: number }> {
   try {
-    const { error } = await db.from('companies').insert(batch);
-    if (error) {
-      // On batch failure, try individual inserts to salvage what we can
-      console.error(`  Batch insert error: ${error.message}. Retrying individually...`);
-      let inserted = 0;
-      let errors = 0;
-      for (const row of batch) {
-        const { error: rowError } = await db.from('companies').insert(row);
-        if (rowError) errors++;
-        else inserted++;
-      }
-      return { inserted, errors };
-    }
-    return { inserted: batch.length, errors: 0 };
+    const result = await bulkImportCompanies(batch, 'csv-loader');
+    return { inserted: result.inserted + result.updated, errors: result.errors };
   } catch (err) {
-    console.error(`  Unexpected error during batch insert: ${err}`);
+    console.error(`  Unexpected error during bulk import: ${err}`);
     return { inserted: 0, errors: batch.length };
   }
 }
