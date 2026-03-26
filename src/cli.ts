@@ -194,6 +194,21 @@ async function main() {
         output(await enrichContact(jsonArgs));
         break;
       }
+      case 'enrich:batch': {
+        const { enrichContactsBatch } = await import('./services/enrichment.js');
+        const contacts = jsonArgs.contacts ?? [];
+        const batchOptions = {
+          concurrency: jsonArgs.concurrency ?? 10,
+          creditCeiling: jsonArgs.creditCeiling,
+          onProgress: (completed: number, total: number) => {
+            if (completed % 50 === 0 || completed === total) {
+              console.error(`Batch enrichment progress: ${completed}/${total}`);
+            }
+          },
+        };
+        output(await enrichContactsBatch(contacts, batchOptions));
+        break;
+      }
       case 'enrich:bulk-verify': {
         const { bulkVerifyEmails } = await import('./services/enrichment.js');
         output(await bulkVerifyEmails(jsonArgs.emails ?? []));
@@ -249,6 +264,13 @@ async function main() {
           node: process.version,
           cwd: process.cwd(),
         });
+        break;
+      }
+
+      // ── Preflight (active provider health checks) ─────────────────────
+      case 'preflight': {
+        const { pingProviders } = await import('./services/preflight.js');
+        output(await pingProviders());
         break;
       }
 

@@ -378,19 +378,44 @@ def preflight_check() -> dict:
             "detail": f"Unexpected error: {type(e).__name__}: {e}",
         }
 
-    # 2. Provider status (API keys configured?)
+    # 2. Provider reachability (active ping, not just key check)
     try:
-        status = _run("status", timeout=15)
-        providers = status.get("providers", {})
-        configured = [k for k, v in providers.items() if v]
-        missing = [k for k, v in providers.items() if not v]
-        checks["providers"] = {
-            "status": "ok" if configured else "fail",
-            "detail": {
-                "configured": configured,
-                "missing": missing,
-            },
-        }
+        preflight_result = _run("preflight", timeout=30)
+        provider_list = preflight_result.get("providers", [])
+        configured = [p["provider"] for p in provider_list if p.get("configured")]
+        missing = [p["provider"] for p in provider_list if not p.get("configured")]
+        reachable = [p["provider"] for p in provider_list if p.get("reachable")]
+        unreachable_details = [
+            f'{p["provider"]}: {p.get("error", "unknown error")}'
+            for p in provider_list
+            if p.get("configured") and not p.get("reachable")
+        ]
+
+        if not configured:
+            checks["providers"] = {
+                "status": "fail",
+                "detail": {"configured": configured, "missing": missing, "reachable": reachable, "unreachable": []},
+            }
+        elif unreachable_details:
+            checks["providers"] = {
+                "status": "fail",
+                "detail": {
+                    "configured": configured,
+                    "missing": missing,
+                    "reachable": reachable,
+                    "unreachable": unreachable_details,
+                },
+            }
+        else:
+            checks["providers"] = {
+                "status": "ok",
+                "detail": {
+                    "configured": configured,
+                    "missing": missing,
+                    "reachable": reachable,
+                    "unreachable": [],
+                },
+            }
     except Exception as e:
         checks["providers"] = {
             "status": "fail",
@@ -421,7 +446,18 @@ def preflight_check() -> dict:
         if not db_ok:
             blockers.append("Database unreachable — all pipeline operations will fail")
         if not providers_ok:
-            blockers.append("No API providers configured — discovery/enrichment impossible")
+            detail = checks["providers"].get("detail", {})
+            if isinstance(detail, dict):
+                unreachable = detail.get("unreachable", [])
+                if unreachable:
+                    blockers.append(
+                        "Provider(s) unreachable — enrichment will fail for: "
+                        + "; ".join(unreachable)
+                    )
+                elif not detail.get("configured"):
+                    blockers.append("No API providers configured — discovery/enrichment impossible")
+            else:
+                blockers.append(f"Provider check failed: {detail}")
         checks["blockers"] = blockers
         checks["recommendation"] = (
             "Do NOT proceed with the pipeline. Fix the blockers above first. "
