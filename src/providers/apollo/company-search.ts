@@ -6,8 +6,10 @@ import { apolloFetch } from './client.js';
 import type { CompanySearchResult } from '../types.js';
 
 export interface ApolloCompanySearchOptions {
-  /** Industry keywords */
+  /** Industry tag IDs for broad industry filtering */
   industries?: string[];
+  /** Keyword tags for refining within industries */
+  keywords?: string[];
   /** Employee count ranges e.g. ["11,50", "51,200"] */
   employeeRanges?: string[];
   /** Country codes */
@@ -55,7 +57,10 @@ export async function searchCompanies(
   };
 
   if (options.industries?.length) {
-    body.q_organization_keyword_tags = options.industries;
+    body.organization_industry_tag_ids = options.industries;
+  }
+  if (options.keywords?.length) {
+    body.q_organization_keyword_tags = options.keywords;
   }
   if (options.employeeRanges?.length) {
     body.organization_num_employees_ranges = options.employeeRanges;

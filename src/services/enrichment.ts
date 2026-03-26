@@ -193,6 +193,118 @@ export async function bulkVerifyEmails(
   return mvBulkVerify(emails);
 }
 
+// ─── Batch Enrichment ─────────────────────────────────────────────────────────
+
+export interface BatchEnrichmentOptions {
+  /** Max contacts to enrich concurrently. Defaults to 10. */
+  concurrency?: number;
+  /** Stop after this many total credits are consumed. Defaults to Infinity. */
+  creditCeiling?: number;
+  /** Called after each contact completes. */
+  onProgress?: (completed: number, total: number, latest: EnrichmentOutput) => void;
+}
+
+export interface BatchEnrichmentResult {
+  results: EnrichmentOutput[];
+  totalCredits: number;
+  cacheHits: number;
+  failures: number;
+  durationMs: number;
+}
+
+/**
+ * Enrich a list of contacts in parallel batches.
+ *
+ * Runs the full waterfall (cache → Apollo → Prospeo → Freckle) per contact,
+ * with concurrency capped to stay within API rate limits and an optional
+ * credit ceiling to prevent runaway spend.
+ *
+ * After all contacts are enriched, runs a single bulk MV sweep on every
+ * collected email for a final verification pass.
+ */
+export async function enrichContactsBatch(
+  contacts: EnrichmentInput[],
+  options: BatchEnrichmentOptions = {},
+): Promise<BatchEnrichmentResult> {
+  const concurrency = options.concurrency ?? 10;
+  const creditCeiling = options.creditCeiling ?? Infinity;
+  const startTime = Date.now();
+
+  const results: EnrichmentOutput[] = [];
+  let totalCredits = 0;
+  let cacheHits = 0;
+  let failures = 0;
+
+  // Process in concurrent chunks
+  for (let i = 0; i < contacts.length; i += concurrency) {
+    // Check credit ceiling before starting next chunk
+    if (totalCredits >= creditCeiling) {
+      console.warn(
+        `Batch enrichment stopped: credit ceiling reached (${totalCredits}/${creditCeiling})`,
+      );
+      break;
+    }
+
+    const chunk = contacts.slice(i, i + concurrency);
+    const chunkResults = await Promise.allSettled(
+      chunk.map(contact => enrichContact(contact)),
+    );
+
+    for (let j = 0; j < chunkResults.length; j++) {
+      const settled = chunkResults[j];
+      if (settled.status === 'fulfilled') {
+        const output = settled.value;
+        results.push(output);
+        totalCredits += output.totalCredits;
+        if (output.cacheHit) cacheHits++;
+        options.onProgress?.(results.length, contacts.length, output);
+      } else {
+        failures++;
+        console.warn(
+          `Enrichment failed for contact ${chunk[j].contactId}:`,
+          settled.reason,
+        );
+        // Push a null-result so the caller still sees every contactId
+        const fallback: EnrichmentOutput = {
+          contactId: chunk[j].contactId,
+          email: chunk[j].email ?? null,
+          emailStatus: null,
+          phone: chunk[j].phone ?? null,
+          phoneStatus: null,
+          providers: [],
+          totalCredits: 0,
+          cacheHit: false,
+        };
+        results.push(fallback);
+        options.onProgress?.(results.length, contacts.length, fallback);
+      }
+    }
+  }
+
+  // ─── Bulk MV sweep on all collected emails ───────────────────────────
+  const emailsToVerify = results
+    .map(r => r.email)
+    .filter((e): e is string => !!e && !['valid'].includes(results.find(r => r.email === e)?.emailStatus ?? ''));
+
+  if (emailsToVerify.length > 0) {
+    const verified = await bulkVerifyEmails(emailsToVerify);
+    const verifiedMap = new Map(verified.map(v => [v.email, v.status]));
+    for (const result of results) {
+      if (result.email && verifiedMap.has(result.email)) {
+        result.emailStatus = verifiedMap.get(result.email) ?? result.emailStatus;
+      }
+    }
+  }
+
+  return {
+    results,
+    totalCredits,
+    cacheHits,
+    failures,
+    durationMs: Date.now() - startTime,
+  };
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function buildOutput(
