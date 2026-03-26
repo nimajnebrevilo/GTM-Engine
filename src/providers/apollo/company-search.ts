@@ -55,7 +55,7 @@ export async function searchCompanies(
   };
 
   if (options.industries?.length) {
-    body.organization_industry_tag_ids = options.industries;
+    body.q_organization_keyword_tags = options.industries;
   }
   if (options.employeeRanges?.length) {
     body.organization_num_employees_ranges = options.employeeRanges;
