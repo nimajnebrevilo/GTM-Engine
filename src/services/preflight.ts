@@ -82,22 +82,7 @@ export async function pingProviders(): Promise<PreflightResult> {
     pings.push(Promise.resolve({ provider: 'million_verifier', configured: false, reachable: false, latencyMs: null, error: 'Not configured' }));
   }
 
-  // ── Freckle ─────────────────────────────────────────────────────────
-  if (isProviderConfigured('freckle')) {
-    pings.push(pingEndpoint('freckle', async () => {
-      const resp = await fetch('https://api.freckle.io/v1/health', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${env.FRECKLE_API_KEY!}`,
-        },
-        body: JSON.stringify({}),
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    }));
-  } else {
-    pings.push(Promise.resolve({ provider: 'freckle', configured: false, reachable: false, latencyMs: null, error: 'Not configured' }));
-  }
+  // Freckle is a manual process, not an API endpoint — skip pinging it.
 
   // ── Exa ─────────────────────────────────────────────────────────────
   if (isProviderConfigured('exa')) {
