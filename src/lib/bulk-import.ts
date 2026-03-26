@@ -28,6 +28,8 @@ export interface BulkImportResult {
   updated: number;
   errors: number;
   details?: unknown;
+  /** Batch ID returned by the Edge Function for staging lookups. */
+  batch_id?: string;
 }
 
 const EDGE_FUNCTION_URL = 'https://dnepejjdqylzkqefnjbt.supabase.co/functions/v1/bulk-import';
@@ -82,7 +84,8 @@ async function sendChunk(
         throw new Error(`Bulk-import Edge Function returned ${response.status}: ${body}`);
       }
 
-      return (await response.json()) as BulkImportResult;
+      const json = await response.json();
+      return json as BulkImportResult;
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       // Only retry on network/5xx errors

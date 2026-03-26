@@ -185,18 +185,52 @@ export async function upsertCompany(
   const result = await bulkImportCompanies([companyRecord], record.sourceName);
   if (result.errors > 0) throw new Error('Failed to insert company via bulk-import');
 
-  // Fetch the newly inserted record to get the ID
-  const { data: inserted, error: fetchError } = await db
-    .from('companies')
-    .select('id')
-    .eq('name_normalized', nameNormalized)
-    .eq('domain', domain ?? '')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // Look up merged company via staging_imports using the batch_id returned
+  // by the Edge Function. This avoids a slow unindexed scan on the ~12.8M
+  // row companies table that was previously timing out.
+  if (result.batch_id) {
+    const { data: staged } = await db
+      .from('staging_imports')
+      .select('raw_payload')
+      .eq('import_batch_id', result.batch_id)
+      .eq('status', 'merged');
 
-  if (fetchError || !inserted) throw new Error('Failed to retrieve inserted company');
-  return { id: inserted.id, isNew: true };
+    const mergedDomains: string[] = (staged ?? [])
+      .map((row: { raw_payload: Record<string, unknown> }) =>
+        (row.raw_payload as Record<string, unknown>)?.domain as string | undefined,
+      )
+      .filter((d): d is string => !!d);
+
+    if (mergedDomains.length > 0) {
+      const { data: inserted, error: fetchError } = await db
+        .from('companies')
+        .select('id')
+        .in('domain', mergedDomains)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (fetchError || !inserted) throw new Error('Failed to retrieve inserted company');
+      return { id: inserted.id, isNew: true };
+    }
+  }
+
+  // Fallback: targeted lookup by domain (indexed column) if batch_id was
+  // not returned or staging query yielded no results.
+  if (domain) {
+    const { data: inserted, error: fetchError } = await db
+      .from('companies')
+      .select('id')
+      .eq('domain', domain)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (fetchError || !inserted) throw new Error('Failed to retrieve inserted company');
+    return { id: inserted.id, isNew: true };
+  }
+
+  throw new Error('Failed to retrieve inserted company: no batch_id or domain available');
 }
 
 /**
