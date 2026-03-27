@@ -26,7 +26,7 @@ export interface PreflightResult {
  * Ping every configured provider with a minimal API call.
  *
  * - Apollo:           GET /v1/auth/health (lightweight, 0 credits)
- * - Prospeo:          POST /credits (returns remaining credits, 0 cost)
+ * - Prospeo:          POST /email-verifier with a dummy email (returns structured response, confirms key + reachability)
  * - Million Verifier: GET /api/v3/?api=KEY&email=test@example.com (single verify, free tier)
  * - Freckle:          POST /v1/health (lightweight ping)
  * - Exa:              POST /search with 1-result query (minimal credit usage)
@@ -55,15 +55,18 @@ export async function pingProviders(): Promise<PreflightResult> {
   // ── Prospeo ─────────────────────────────────────────────────────────
   if (isProviderConfigured('prospeo')) {
     pings.push(pingEndpoint('prospeo', async () => {
-      const resp = await fetch('https://api.prospeo.io/credits', {
+      const resp = await fetch('https://api.prospeo.io/email-verifier', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-KEY': env.PROSPEO_API_KEY!,
         },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ email: 'healthcheck@example.com' }),
       });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      // A 401 means bad key; a 404 means wrong endpoint.
+      // Any 2xx or 4xx (except 401/404) means the API is reachable and the key is accepted.
+      if (resp.status === 401) throw new Error('Invalid API key (HTTP 401)');
+      if (resp.status === 404) throw new Error('Endpoint not found (HTTP 404)');
     }));
   } else {
     pings.push(Promise.resolve({ provider: 'prospeo', configured: false, reachable: false, latencyMs: null, error: 'Not configured' }));
