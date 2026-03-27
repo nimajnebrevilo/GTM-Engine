@@ -48,6 +48,8 @@ export interface ContactEnrichmentResult {
   emailStatus: 'valid' | 'invalid' | 'catch_all' | 'unknown' | 'risky' | null;
   phone: string | null;
   phoneStatus: 'valid' | 'invalid' | 'unknown' | null;
+  /** LinkedIn profile URL discovered during enrichment */
+  linkedinUrl: string | null;
   /** Which provider returned this data */
   provider: string;
   /** Credits consumed for this enrichment */

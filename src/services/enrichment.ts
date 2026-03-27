@@ -36,6 +36,7 @@ export interface EnrichmentOutput {
   emailStatus: string | null;
   phone: string | null;
   phoneStatus: string | null;
+  linkedinUrl: string | null;
   providers: string[];
   totalCredits: number;
   cacheHit: boolean;
@@ -54,6 +55,7 @@ export async function enrichContact(input: EnrichmentInput): Promise<EnrichmentO
   let emailStatus: string | null = null;
   let phone = input.phone ?? null;
   let phoneStatus: string | null = null;
+  let linkedinUrl = input.linkedinUrl ?? null;
 
   // ─── Step 1: Cache check ────────────────────────────────────────────────
   const { data: cached } = await db
@@ -74,6 +76,7 @@ export async function enrichContact(input: EnrichmentInput): Promise<EnrichmentO
         emailStatus: (resp.emailStatus as string) ?? 'unknown',
         phone: resp.phone as string,
         phoneStatus: (resp.phoneStatus as string) ?? 'unknown',
+        linkedinUrl: (resp.linkedinUrl as string) ?? linkedinUrl,
         providers: [cached.provider],
         totalCredits: 0,
         cacheHit: true,
@@ -105,6 +108,7 @@ export async function enrichContact(input: EnrichmentInput): Promise<EnrichmentO
         phone = result.phone;
         phoneStatus = result.phoneStatus;
       }
+      if (result.linkedinUrl) linkedinUrl = result.linkedinUrl;
 
       // MV inline validation
       if (email && isProviderConfigured('million_verifier')) {
@@ -112,7 +116,7 @@ export async function enrichContact(input: EnrichmentInput): Promise<EnrichmentO
         emailStatus = mv.status;
         if (mv.status === 'valid') {
           if (phone) {
-            return buildOutput(input.contactId, email, emailStatus, phone, phoneStatus, providers, totalCredits);
+            return buildOutput(input.contactId, email, emailStatus, phone, phoneStatus, linkedinUrl, providers, totalCredits);
           }
         }
         // MV fail — continue to Prospeo
@@ -143,7 +147,7 @@ export async function enrichContact(input: EnrichmentInput): Promise<EnrichmentO
         const mv = await mvVerify(email);
         emailStatus = mv.status;
         if (mv.status === 'valid' && phone) {
-          return buildOutput(input.contactId, email, emailStatus, phone, phoneStatus, providers, totalCredits);
+          return buildOutput(input.contactId, email, emailStatus, phone, phoneStatus, linkedinUrl, providers, totalCredits);
         }
       }
     } catch (err) {
@@ -172,12 +176,27 @@ export async function enrichContact(input: EnrichmentInput): Promise<EnrichmentO
         phone = result.phone;
         phoneStatus = result.phoneStatus;
       }
+      if (result.linkedinUrl && !linkedinUrl) linkedinUrl = result.linkedinUrl;
     } catch (err) {
       console.warn('Freckle enrichment failed:', err);
     }
   }
 
-  return buildOutput(input.contactId, email, emailStatus, phone, phoneStatus, providers, totalCredits);
+  // ─── Persist enriched fields back to the contacts table ─────────────
+  const updates: Record<string, unknown> = {};
+  if (email) { updates.email = email; updates.email_status = emailStatus; }
+  if (phone) { updates.phone = phone; updates.phone_status = phoneStatus; }
+  if (linkedinUrl) updates.linkedin_url = linkedinUrl;
+
+  if (Object.keys(updates).length > 0) {
+    try {
+      await db.from('contacts').update(updates).eq('id', input.contactId);
+    } catch (err) {
+      console.warn(`Failed to persist enrichment for contact ${input.contactId}:`, err);
+    }
+  }
+
+  return buildOutput(input.contactId, email, emailStatus, phone, phoneStatus, linkedinUrl, providers, totalCredits);
 }
 
 /**
@@ -271,6 +290,7 @@ export async function enrichContactsBatch(
           emailStatus: null,
           phone: chunk[j].phone ?? null,
           phoneStatus: null,
+          linkedinUrl: chunk[j].linkedinUrl ?? null,
           providers: [],
           totalCredits: 0,
           cacheHit: false,
@@ -313,10 +333,11 @@ function buildOutput(
   emailStatus: string | null,
   phone: string | null,
   phoneStatus: string | null,
+  linkedinUrl: string | null,
   providers: string[],
   totalCredits: number,
 ): EnrichmentOutput {
-  return { contactId, email, emailStatus, phone, phoneStatus, providers, totalCredits, cacheHit: false };
+  return { contactId, email, emailStatus, phone, phoneStatus, linkedinUrl, providers, totalCredits, cacheHit: false };
 }
 
 async function cacheResult(

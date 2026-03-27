@@ -52,6 +52,7 @@ export async function enrichContact(contact: {
       emailStatus: null,
       phone: null,
       phoneStatus: null,
+      linkedinUrl: null,
       provider: 'freckle',
       creditsUsed: response.credits_used,
       rawData: response as unknown as Record<string, unknown>,
@@ -67,6 +68,7 @@ export async function enrichContact(contact: {
     phoneStatus: response.data.phone
       ? (response.data.phone_verified ? 'valid' : 'unknown')
       : null,
+    linkedinUrl: response.data.linkedin_url ?? null,
     provider: 'freckle',
     creditsUsed: response.credits_used,
     rawData: response as unknown as Record<string, unknown>,

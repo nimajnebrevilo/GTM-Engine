@@ -31,6 +31,15 @@ export interface ExportRow {
   segment: string;
   outcome: string;
   tags: string;
+  // Contact-level fields
+  contact_first_name: string;
+  contact_last_name: string;
+  contact_email: string;
+  contact_email_status: string;
+  contact_phone: string;
+  contact_title: string;
+  contact_seniority: string;
+  contact_linkedin_url: string;
 }
 
 /**
@@ -52,7 +61,11 @@ export async function getExportData(
         employee_count, employee_range, revenue_estimate_usd,
         founded_year, company_type, registration_number, description,
         linkedin_url, phone, original_source, validation_status,
-        enrichment_status, enriched_at, times_used, last_used_at, tags
+        enrichment_status, enriched_at, times_used, last_used_at, tags,
+        contacts (
+          first_name, last_name, email, email_status, phone, title,
+          seniority, linkedin_url
+        )
       )
     `)
     .eq('campaign_id', campaignId)
@@ -61,10 +74,13 @@ export async function getExportData(
 
   if (error) throw new Error(`Failed to fetch export data: ${error.message}`);
 
-  return (data ?? []).map(row => {
-    const c = (row as Record<string, unknown>).companies as Record<string, unknown> | null;
+  const rows: ExportRow[] = [];
 
-    return {
+  for (const row of data ?? []) {
+    const c = (row as Record<string, unknown>).companies as Record<string, unknown> | null;
+    const contacts = ((c?.contacts as Record<string, unknown>[]) ?? []);
+
+    const companyFields = {
       company_name: (c?.name as string) ?? '',
       domain: (c?.domain as string) ?? '',
       website: (c?.website as string) ?? '',
@@ -92,7 +108,39 @@ export async function getExportData(
       outcome: row.outcome ?? '',
       tags: ((c?.tags as string[]) ?? []).join('; '),
     };
-  });
+
+    if (contacts.length === 0) {
+      // Company with no contacts — emit one row with empty contact fields
+      rows.push({
+        ...companyFields,
+        contact_first_name: '',
+        contact_last_name: '',
+        contact_email: '',
+        contact_email_status: '',
+        contact_phone: '',
+        contact_title: '',
+        contact_seniority: '',
+        contact_linkedin_url: '',
+      });
+    } else {
+      // One row per contact at this company
+      for (const ct of contacts) {
+        rows.push({
+          ...companyFields,
+          contact_first_name: (ct.first_name as string) ?? '',
+          contact_last_name: (ct.last_name as string) ?? '',
+          contact_email: (ct.email as string) ?? '',
+          contact_email_status: (ct.email_status as string) ?? '',
+          contact_phone: (ct.phone as string) ?? '',
+          contact_title: (ct.title as string) ?? '',
+          contact_seniority: (ct.seniority as string) ?? '',
+          contact_linkedin_url: (ct.linkedin_url as string) ?? '',
+        });
+      }
+    }
+  }
+
+  return rows;
 }
 
 /**

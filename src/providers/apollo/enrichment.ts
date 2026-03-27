@@ -14,6 +14,7 @@ interface ApolloEnrichResponse {
     first_name: string;
     last_name: string;
     title: string | null;
+    linkedin_url: string | null;
     organization: { name: string; primary_domain: string | null } | null;
   } | null;
 }
@@ -53,6 +54,7 @@ export async function enrichContact(contact: {
       emailStatus: null,
       phone: null,
       phoneStatus: null,
+      linkedinUrl: null,
       provider: 'apollo',
       creditsUsed: 0,
       rawData: {},
@@ -66,6 +68,7 @@ export async function enrichContact(contact: {
     emailStatus: mapEmailStatus(person.email_status),
     phone,
     phoneStatus: phone ? 'unknown' : null,
+    linkedinUrl: person.linkedin_url ?? null,
     provider: 'apollo',
     creditsUsed: 1,
     rawData: person as unknown as Record<string, unknown>,

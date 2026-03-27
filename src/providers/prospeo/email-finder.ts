@@ -43,6 +43,7 @@ export async function findEmail(contact: {
       emailStatus: null,
       phone: null,
       phoneStatus: null,
+      linkedinUrl: null,
       provider: 'prospeo',
       creditsUsed: 0,
       rawData: response as unknown as Record<string, unknown>,
@@ -54,6 +55,7 @@ export async function findEmail(contact: {
     emailStatus: mapProspeoStatus(response.response.email_status),
     phone: null, // Prospeo doesn't provide phone
     phoneStatus: null,
+    linkedinUrl: null, // Prospeo doesn't provide LinkedIn
     provider: 'prospeo',
     creditsUsed: 1,
     rawData: response as unknown as Record<string, unknown>,
